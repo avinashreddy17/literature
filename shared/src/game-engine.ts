@@ -37,13 +37,19 @@ export function shuffleDeck(deck: Card[]): Card[] {
 }
 
 /**
- * Initializes a new Literature game with 6 players
- * Players are assigned to alternating teams and dealt 8 cards each
+ * Initializes a new Literature game with 6 or 8 players
+ * 6 players: 2 teams of 3, 8 cards each
+ * 8 players: 2 teams of 4, 6 cards each
  */
 export function initializeGame(playerNames: string[]): GameState {
-  if (playerNames.length !== 6) {
-    throw new Error('Literature requires exactly 6 players');
+  const playerCount = playerNames.length;
+  
+  if (playerCount !== 6 && playerCount !== 8) {
+    throw new Error('Literature requires exactly 6 or 8 players');
   }
+
+  // Calculate cards per player: 48 total cards divided by player count
+  const cardsPerPlayer = 48 / playerCount; // 8 for 6 players, 6 for 8 players
 
   // Create and shuffle a fresh deck
   const deck = shuffleDeck(createDeck());
@@ -57,10 +63,10 @@ export function initializeGame(playerNames: string[]): GameState {
     cardCount: 0
   }));
 
-  // Deal cards: 8 cards per player, dealing one at a time
+  // Deal cards: cardsPerPlayer per player, dealing one at a time
   let cardIndex = 0;
-  for (let round = 0; round < 8; round++) {
-    for (let playerIndex = 0; playerIndex < 6; playerIndex++) {
+  for (let round = 0; round < cardsPerPlayer; round++) {
+    for (let playerIndex = 0; playerIndex < playerCount; playerIndex++) {
       players[playerIndex].hand.push(deck[cardIndex]);
       players[playerIndex].cardCount++;
       cardIndex++;
@@ -68,7 +74,7 @@ export function initializeGame(playerNames: string[]): GameState {
   }
 
   // Choose random starting player
-  const currentPlayerIndex = Math.floor(Math.random() * 6);
+  const currentPlayerIndex = Math.floor(Math.random() * playerCount);
 
   // Create initial game state
   const gameState: GameState = {

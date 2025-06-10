@@ -100,4 +100,125 @@ export function testShuffleDeck(): void {
   }
   
   console.log('All shuffle tests passed! 🃏');
-} 
+}
+
+export function testInitializeGame(): void {
+  console.log('Testing initializeGame()...');
+  
+  // Test both 6-player and 8-player games
+  testGameSetup(6, 8);
+  testGameSetup(8, 6);
+  
+  // Test error handling
+  try {
+    initializeGame(['Too', 'Few']);
+    throw new Error('Should have thrown error for too few players');
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Literature requires exactly 6 or 8 players') {
+      console.log('✓ Correctly rejects wrong number of players');
+    } else {
+      throw error;
+    }
+  }
+  
+  try {
+    initializeGame(['1', '2', '3', '4', '5', '6', '7']); // 7 players
+    throw new Error('Should have thrown error for 7 players');
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Literature requires exactly 6 or 8 players') {
+      console.log('✓ Correctly rejects 7 players');
+    } else {
+      throw error;
+    }
+  }
+  
+  console.log('All game initialization tests passed! 🎮');
+}
+
+function testGameSetup(playerCount: number, expectedCardsPerPlayer: number): void {
+  console.log(`\nTesting ${playerCount}-player game...`);
+  
+  const playerNames = Array.from({ length: playerCount }, (_, i) => `Player${i + 1}`);
+  const gameState = initializeGame(playerNames);
+  
+  // Test 1: Should have correct number of players
+  if (gameState.players.length !== playerCount) {
+    throw new Error(`Expected ${playerCount} players, got ${gameState.players.length}`);
+  }
+  console.log(`✓ Game has ${playerCount} players`);
+  
+  // Test 2: Each player should have correct number of cards
+  for (const player of gameState.players) {
+    if (player.hand.length !== expectedCardsPerPlayer) {
+      throw new Error(`Player ${player.name} has ${player.hand.length} cards, expected ${expectedCardsPerPlayer}`);
+    }
+    if (player.cardCount !== expectedCardsPerPlayer) {
+      throw new Error(`Player ${player.name} cardCount is ${player.cardCount}, expected ${expectedCardsPerPlayer}`);
+    }
+  }
+  console.log(`✓ Each player has exactly ${expectedCardsPerPlayer} cards`);
+  
+  // Test 3: Teams should alternate (0, 1, 0, 1, ...)
+  for (let i = 0; i < playerCount; i++) {
+    const expectedTeam = i % 2;
+    if (gameState.players[i].team !== expectedTeam) {
+      throw new Error(`Player ${i} should be on team ${expectedTeam}, got ${gameState.players[i].team}`);
+    }
+  }
+  console.log('✓ Teams alternate correctly');
+  
+  // Test 4: Teams should be balanced
+  const team0Count = gameState.players.filter(p => p.team === 0).length;
+  const team1Count = gameState.players.filter(p => p.team === 1).length;
+  const expectedTeamSize = playerCount / 2;
+  
+  if (team0Count !== expectedTeamSize || team1Count !== expectedTeamSize) {
+    throw new Error(`Teams should have ${expectedTeamSize} players each, got ${team0Count} and ${team1Count}`);
+  }
+  console.log(`✓ Teams balanced (${expectedTeamSize} players each)`);
+  
+  // Test 5: All 48 cards should be distributed
+  const allCards: Card[] = [];
+  for (const player of gameState.players) {
+    allCards.push(...player.hand);
+  }
+  if (allCards.length !== 48) {
+    throw new Error(`Expected 48 total cards, got ${allCards.length}`);
+  }
+  console.log('✓ All 48 cards distributed to players');
+  
+  // Test 6: No duplicate cards
+  const cardStrings = allCards.map(card => `${card.rank}-${card.suit}`);
+  const uniqueCards = new Set(cardStrings);
+  if (uniqueCards.size !== 48) {
+    throw new Error('Found duplicate cards in dealt hands');
+  }
+  console.log('✓ No duplicate cards in any player hand');
+  
+  // Test 7: Player IDs should be generated correctly
+  for (let i = 0; i < playerCount; i++) {
+    const expectedId = `player${i + 1}`;
+    if (gameState.players[i].id !== expectedId) {
+      throw new Error(`Expected player ID '${expectedId}', got '${gameState.players[i].id}'`);
+    }
+  }
+  console.log('✓ Player IDs generated correctly');
+  
+  // Test 8: Game state properties
+  if (gameState.phase !== 'waiting') {
+    throw new Error(`Expected phase 'waiting', got '${gameState.phase}'`);
+  }
+  if (gameState.claimedSets.length !== 0) {
+    throw new Error(`Expected 0 claimed sets, got ${gameState.claimedSets.length}`);
+  }
+  if (gameState.lastMove !== undefined) {
+    throw new Error('Expected lastMove to be undefined');
+  }
+  if (typeof gameState.id !== 'string' || !gameState.id.startsWith('game_')) {
+    throw new Error(`Expected game ID to start with 'game_', got '${gameState.id}'`);
+  }
+  if (gameState.currentPlayerIndex < 0 || gameState.currentPlayerIndex >= playerCount) {
+    throw new Error(`Current player index should be 0-${playerCount - 1}, got ${gameState.currentPlayerIndex}`);
+  }
+  console.log('✓ Game state properties set correctly');
+}

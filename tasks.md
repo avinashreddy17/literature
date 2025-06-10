@@ -179,3 +179,22 @@
 ### 5.2 – Deploy to Vercel (frontend) and Render/Railway (backend)
 - **Start:** Local only
 - **End:** Live game link + backend reachable via public WebSocket
+
+---
+
+## 📝 DEVELOPMENT PROTOCOL
+
+### Documentation Rule
+- **After each completed phase, update `PROGRESS.md` with detailed documentation**
+- Include: goals achieved, files changed, functions implemented, test results, key learnings
+- Update statistics: phases completed, functions implemented, lines of code
+- Mark completed phases with ✅ in the "NEXT PHASES" section
+
+### Coding Instructions
+- Write the absolute minimum code required
+- No sweeping changes
+- No unrelated edits - focus on just the task you're on
+- Make code precise, modular, testable
+- Don't break existing functionality
+- Test thoroughly before marking phase complete
+- If user needs to do anything, tell them clearly
