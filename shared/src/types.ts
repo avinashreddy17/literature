@@ -22,7 +22,7 @@ export interface GameState {
   currentPlayerIndex: number;
   phase: 'waiting' | 'playing' | 'finished';
   claimedSets: {
-    team: number;
+    team: number | null; // null indicates cancelled set (wrong locations)
     suit: Suit;
     isHigh: boolean; // true for 9-A, false for 2-7
     cards: Card[];
