@@ -56,7 +56,7 @@ export function initializeGame(playerNames: string[]): GameState {
   
   // Create players with alternating teams
   const players: Player[] = playerNames.map((name, index) => ({
-    id: name.toLowerCase().replace(/\s+/g, ''), // Convert to ID
+    id: name.toLowerCase().replace(/[^a-z0-9]/g, ''), // Consistent with GameManager
     name: name,
     team: index % 2, // Alternates between 0 and 1
     hand: [],
@@ -81,7 +81,7 @@ export function initializeGame(playerNames: string[]): GameState {
     id: generateGameId(),
     players,
     currentPlayerIndex,
-    phase: 'waiting',
+    phase: 'playing',
     claimedSets: [],
     lastMove: undefined
   };
@@ -141,12 +141,7 @@ function validateClaimMove(gameState: GameState, move: ClaimMove): boolean {
     return false;
   }
 
-  // Rule 5: Must specify card locations
-  if (!move.cardLocations || move.cardLocations.length === 0) {
-    return false;
-  }
-
-  // Basic validation passed - detailed validation happens in checkClaim
+  // No need to validate card locations - automatic discovery now
   return true;
 }
 
@@ -154,50 +149,94 @@ function validateClaimMove(gameState: GameState, move: ClaimMove): boolean {
  * Validates an ask-card move according to Literature rules
  */
 function validateAskCardMove(gameState: GameState, move: AskCardMove): boolean {
+  console.log('\n🔍 ===== VALIDATING ASK CARD MOVE =====');
+  console.log('📥 Move to validate:', JSON.stringify(move, null, 2));
+  
   // Rule 1: Game must be in playing phase
+  console.log('🔍 Rule 1: Checking game phase...');
+  console.log('   Current phase:', gameState.phase);
   if (gameState.phase !== 'playing') {
+    console.log('❌ VALIDATION FAILED: Game not in playing phase');
     return false;
   }
+  console.log('✅ Rule 1 passed: Game is in playing phase');
 
   // Rule 2: It must be the asking player's turn
+  console.log('🔍 Rule 2: Checking if it\'s player\'s turn...');
   const currentPlayer = gameState.players[gameState.currentPlayerIndex];
+  console.log('   Current player:', currentPlayer.name, '(', currentPlayer.id, ')');
+  console.log('   Move from player:', move.fromPlayerId);
   if (currentPlayer.id !== move.fromPlayerId) {
+    console.log('❌ VALIDATION FAILED: Not player\'s turn');
     return false;
   }
+  console.log('✅ Rule 2 passed: It is the player\'s turn');
 
   // Rule 3: Find the target player
+  console.log('🔍 Rule 3: Finding target player...');
   const targetPlayer = gameState.players.find(p => p.id === move.toPlayerId);
+  console.log('   Target player ID:', move.toPlayerId);
+  console.log('   Target player found:', targetPlayer ? `${targetPlayer.name} (${targetPlayer.id})` : 'NOT FOUND');
   if (!targetPlayer) {
+    console.log('❌ VALIDATION FAILED: Target player not found');
     return false;
   }
+  console.log('✅ Rule 3 passed: Target player found');
 
   // Rule 4: Target player must be on the opposite team
+  console.log('🔍 Rule 4: Checking team restrictions...');
+  console.log('   Current player team:', currentPlayer.team);
+  console.log('   Target player team:', targetPlayer.team);
   if (currentPlayer.team === targetPlayer.team) {
+    console.log('❌ VALIDATION FAILED: Cannot ask teammates');
     return false;
   }
+  console.log('✅ Rule 4 passed: Target is on opposing team');
 
   // Rule 5: Target player must have at least one card
+  console.log('🔍 Rule 5: Checking target has cards...');
+  console.log('   Target player card count:', targetPlayer.cardCount);
   if (targetPlayer.cardCount === 0) {
+    console.log('❌ VALIDATION FAILED: Target player has no cards');
     return false;
   }
+  console.log('✅ Rule 5 passed: Target player has cards');
 
   // Rule 6: Asking player must not have the requested card
+  console.log('🔍 Rule 6: Checking if asking player already has the card...');
+  console.log('   Requested card:', move.card);
+  console.log('   Current player hand:', currentPlayer.hand);
   const hasRequestedCard = currentPlayer.hand.some(card => 
     card.suit === move.card.suit && card.rank === move.card.rank
   );
+  console.log('   Player already has this card:', hasRequestedCard);
   if (hasRequestedCard) {
+    console.log('❌ VALIDATION FAILED: Player already has the requested card');
     return false;
   }
+  console.log('✅ Rule 6 passed: Player doesn\'t have the requested card');
 
   // Rule 7: Asking player must have another card in the same half-suit
+  console.log('🔍 Rule 7: Checking half-suit possession...');
   const requestedCardIsHigh = isHighCard(move.card.rank);
-  const hasCardInSameHalfSuit = currentPlayer.hand.some(card => 
+  console.log('   Requested card is high?', requestedCardIsHigh, '(', move.card.rank, ')');
+  console.log('   Looking for cards in same half-suit:', move.card.suit, requestedCardIsHigh ? 'HIGH' : 'LOW');
+  
+  const matchingCards = currentPlayer.hand.filter(card => 
     card.suit === move.card.suit && isHighCard(card.rank) === requestedCardIsHigh
   );
+  console.log('   Player\'s cards in same half-suit:', matchingCards);
+  
+  const hasCardInSameHalfSuit = matchingCards.length > 0;
+  console.log('   Has card in same half-suit:', hasCardInSameHalfSuit);
   if (!hasCardInSameHalfSuit) {
+    console.log('❌ VALIDATION FAILED: Player has no cards in the same half-suit');
     return false;
   }
+  console.log('✅ Rule 7 passed: Player has cards in the same half-suit');
 
+  console.log('🎉 ALL VALIDATION RULES PASSED!');
+  console.log('===== VALIDATION COMPLETE =====\n');
   return true;
 }
 
@@ -216,8 +255,8 @@ function isHighCard(rank: Rank): boolean {
  */
 export function applyMove(gameState: GameState, move: AskCardMove | ClaimMove): GameState {
   if (move.type === 'claim') {
-    const claimResult = checkClaim(gameState, move);
-    return claimResult.updatedState;
+    const claimResult = processClaimWithGameEnd(gameState, move);
+    return claimResult.updatedState || gameState;
   }
 
   if (move.type === 'ask') {
@@ -275,6 +314,32 @@ function applyAskCardMove(gameState: GameState, move: AskCardMove): GameState {
     newGameState.currentPlayerIndex = targetPlayerIndex;
   }
 
+  // Check if current player has no cards after this move
+  const finalCurrentPlayer = newGameState.players[newGameState.currentPlayerIndex];
+  if (finalCurrentPlayer.cardCount === 0) {
+    console.log(`🎯 Current player ${finalCurrentPlayer.name} has no cards left, finding next valid player...`);
+    
+    // Find next valid player on the same team
+    const validTeammates = getValidTeammates(newGameState, finalCurrentPlayer.id);
+    if (validTeammates.length > 0) {
+      // Pass turn to a teammate
+      const nextTeammate = validTeammates[0];
+      const nextTeammateIndex = newGameState.players.findIndex(p => p.id === nextTeammate.id);
+      newGameState.currentPlayerIndex = nextTeammateIndex;
+      console.log(`🎯 Turn passed to teammate ${nextTeammate.name}`);
+    } else {
+      // No valid teammates, find next valid player from any team
+      const nextValidPlayer = getNextValidPlayer(newGameState);
+      if (nextValidPlayer) {
+        const nextPlayerIndex = newGameState.players.findIndex(p => p.id === nextValidPlayer.id);
+        newGameState.currentPlayerIndex = nextPlayerIndex;
+        console.log(`🎯 Turn passed to ${nextValidPlayer.name} (cross-team)`);
+      } else {
+        console.log(`❗ No valid players found - this shouldn't happen unless game is over`);
+      }
+    }
+  }
+
   // Record the move in lastMove
   newGameState.lastMove = {
     fromPlayer: move.fromPlayerId,
@@ -283,119 +348,56 @@ function applyAskCardMove(gameState: GameState, move: AskCardMove): GameState {
     successful
   };
 
-  return newGameState;
+  // Check if one team has no cards left and auto-award remaining sets
+  const finalState = autoAwardRemainingToTeamWithCards(newGameState);
+
+  return finalState;
 }
 
 /**
- * Checks and processes a half-suit claim according to Literature rules
- * Returns the result of the claim and updated game state
+ * Checks and processes a half-suit claim with simplified all-or-nothing logic
+ * Claiming team must have ALL 6 cards to win, otherwise opposing team gets the point
  */
 export function checkClaim(gameState: GameState, claim: ClaimMove): {
   success: boolean;
-  winningTeam: number | null; // null if cancelled
+  winningTeam: number;
   updatedState: GameState;
   message: string;
 } {
-  // Validate basic claim structure
-  if (claim.cardLocations.length === 0) {
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState: gameState,
-      message: 'Claim must specify card locations'
-    };
-  }
-
-  // Get all cards for this half-suit
+  // Get all 6 cards for this half-suit
   const expectedCards = getHalfSuitCards(claim.suit, claim.isHigh);
   
-  // Validate that exactly 6 cards are claimed
-  const claimedCards: Card[] = [];
-  for (const location of claim.cardLocations) {
-    claimedCards.push(...location.cards);
-  }
-  
-  if (claimedCards.length !== 6) {
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState: gameState,
-      message: `Half-suit must have exactly 6 cards, got ${claimedCards.length}`
-    };
-  }
-
-  // Validate that claimed cards match the expected half-suit
-  const claimedCardStrings = claimedCards.map(card => `${card.rank}-${card.suit}`).sort();
-  const expectedCardStrings = expectedCards.map(card => `${card.rank}-${card.suit}`).sort();
-  
-  if (claimedCardStrings.join(',') !== expectedCardStrings.join(',')) {
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState: gameState,
-      message: 'Claimed cards do not match the specified half-suit'
-    };
-  }
-
   // Find the claiming player and their team
   const claimingPlayer = gameState.players.find(p => p.id === claim.playerId);
   if (!claimingPlayer) {
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState: gameState,
-      message: 'Claiming player not found'
-    };
+    throw new Error('Claiming player not found - this should have been caught in validation');
   }
 
   const claimingTeam = claimingPlayer.team;
   const opposingTeam = claimingTeam === 0 ? 1 : 0;
 
-  // Check if any opponent has cards from this half-suit
-  const opponentCards = findOpponentCards(gameState, claimingTeam, expectedCards);
-  if (opponentCards.length > 0) {
-    // Opponent has cards - opposing team wins the half-suit
+  // Check if claiming team has ALL 6 cards
+  const teamHasAllCards = verifyTeamPossession(gameState, claimingTeam, expectedCards);
+  
+  if (teamHasAllCards) {
+    // Claiming team has all cards - they win the half-suit
+    const updatedState = awardHalfSuit(gameState, claim.suit, claim.isHigh, claimingTeam, expectedCards);
+    return {
+      success: true,
+      winningTeam: claimingTeam,
+      updatedState,
+      message: `Team ${claimingTeam} successfully claimed ${claim.isHigh ? 'high' : 'low'} ${claim.suit}`
+    };
+  } else {
+    // Claiming team doesn't have all cards - opposing team wins
     const updatedState = awardHalfSuit(gameState, claim.suit, claim.isHigh, opposingTeam, expectedCards);
     return {
       success: false,
       winningTeam: opposingTeam,
       updatedState,
-      message: `Opposing team gets the half-suit (they have ${opponentCards.length} cards)`
+      message: `Team ${opposingTeam} gets the half-suit (claiming team didn't have all cards)`
     };
   }
-
-  // Check if claiming team actually has all the cards
-  const teamHasAllCards = verifyTeamPossession(gameState, claimingTeam, expectedCards);
-  if (!teamHasAllCards) {
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState: gameState,
-      message: 'Claiming team does not possess all cards in the half-suit'
-    };
-  }
-
-  // Check if stated locations are correct
-  const locationsCorrect = verifyCardLocations(gameState, claim.cardLocations);
-  if (!locationsCorrect) {
-    // Team has cards but locations are wrong - half-suit is cancelled
-    const updatedState = cancelHalfSuit(gameState, claim.suit, claim.isHigh, expectedCards);
-    return {
-      success: false,
-      winningTeam: null,
-      updatedState,
-      message: `Card locations incorrect - ${claim.isHigh ? 'high' : 'low'} ${claim.suit} cancelled`
-    };
-  }
-
-  // Perfect claim - award half-suit to claiming team
-  const updatedState = awardHalfSuit(gameState, claim.suit, claim.isHigh, claimingTeam, expectedCards);
-  return {
-    success: true,
-    winningTeam: claimingTeam,
-    updatedState,
-    message: `Team ${claimingTeam} successfully claimed ${claim.isHigh ? 'high' : 'low'} ${claim.suit}`
-  };
 }
 
 /**
@@ -407,28 +409,6 @@ function getHalfSuitCards(suit: Suit, isHigh: boolean): Card[] {
     : ['2', '3', '4', '5', '6', '7'];
   
   return ranks.map(rank => ({ suit, rank }));
-}
-
-/**
- * Finds cards from a half-suit that are held by the opposing team
- */
-function findOpponentCards(gameState: GameState, claimingTeam: number, expectedCards: Card[]): Card[] {
-  const opponentCards: Card[] = [];
-  
-  for (const player of gameState.players) {
-    if (player.team !== claimingTeam) {
-      for (const card of player.hand) {
-        const hasExpectedCard = expectedCards.some(expected => 
-          expected.suit === card.suit && expected.rank === card.rank
-        );
-        if (hasExpectedCard) {
-          opponentCards.push(card);
-        }
-      }
-    }
-  }
-  
-  return opponentCards;
 }
 
 /**
@@ -456,30 +436,37 @@ function verifyTeamPossession(gameState: GameState, team: number, expectedCards:
 }
 
 /**
- * Verifies that the stated card locations in the claim are correct
+ * Auto-awards all remaining unclaimed sets to the team that has all the cards
+ * Triggers when one team is completely eliminated (has no cards left)
  */
-function verifyCardLocations(gameState: GameState, cardLocations: ClaimMove['cardLocations']): boolean {
-  for (const location of cardLocations) {
-    const player = gameState.players.find(p => p.id === location.playerId);
-    if (!player) {
-      return false;
+function autoAwardRemainingToTeamWithCards(gameState: GameState): GameState {
+  const teamWithAllCards = getTeamWithAllCards(gameState);
+  if (teamWithAllCards !== null) {
+    console.log(`🏆 Team ${teamWithAllCards} has all remaining cards! Auto-awarding remaining sets...`);
+    
+    const updatedState = { ...gameState, claimedSets: [...gameState.claimedSets] };
+    const unclaimedSets = getUnclaimedSets(updatedState);
+    
+    for (const unclaimedSet of unclaimedSets) {
+      const setCards = getHalfSuitCards(unclaimedSet.suit, unclaimedSet.isHigh);
+      updatedState.claimedSets.push({
+        team: teamWithAllCards,
+        suit: unclaimedSet.suit,
+        isHigh: unclaimedSet.isHigh,
+        cards: setCards
+      });
     }
     
-    for (const claimedCard of location.cards) {
-      const hasCard = player.hand.some(card => 
-        card.suit === claimedCard.suit && card.rank === claimedCard.rank
-      );
-      if (!hasCard) {
-        return false;
-      }
-    }
+    console.log(`✅ Auto-awarded ${unclaimedSets.length} remaining sets to Team ${teamWithAllCards}`);
+    return updatedState;
   }
   
-  return true;
+  return gameState; // No team elimination, return unchanged
 }
 
 /**
  * Awards a half-suit to a team and removes cards from all players
+ * Also handles advanced turn passing and team-with-no-cards scenarios
  */
 function awardHalfSuit(gameState: GameState, suit: Suit, isHigh: boolean, winningTeam: number, cards: Card[]): GameState {
   const updatedState: GameState = {
@@ -508,55 +495,51 @@ function awardHalfSuit(gameState: GameState, suit: Suit, isHigh: boolean, winnin
     player.cardCount = player.hand.length;
   }
   
-  return updatedState;
-}
-
-/**
- * Cancels a half-suit (removes cards but awards to no team)
- * Records the cancellation in game state for history tracking
- */
-function cancelHalfSuit(gameState: GameState, suit: Suit, isHigh: boolean, cards: Card[]): GameState {
-  const updatedState: GameState = {
-    ...gameState,
-    players: gameState.players.map(player => ({
-      ...player,
-      hand: player.hand.filter(card => 
-        !cards.some(halfSuitCard => 
-          halfSuitCard.suit === card.suit && halfSuitCard.rank === card.rank
-        )
-      )
-    })),
-    claimedSets: [
-      ...gameState.claimedSets,
-      {
-        team: null, // null indicates cancelled set
-        suit,
-        isHigh,
-        cards: [...cards]
+  // Check if current player has no cards after this claim
+  const currentPlayer = updatedState.players[updatedState.currentPlayerIndex];
+  if (currentPlayer.cardCount === 0) {
+    console.log(`🎯 Current player ${currentPlayer.name} has no cards left, finding next valid player...`);
+    
+    // Find next valid player on the same team
+    const validTeammates = getValidTeammates(updatedState, currentPlayer.id);
+    if (validTeammates.length > 0) {
+      // Pass turn to a teammate
+      const nextTeammate = validTeammates[0];
+      const nextTeammateIndex = updatedState.players.findIndex(p => p.id === nextTeammate.id);
+      updatedState.currentPlayerIndex = nextTeammateIndex;
+      console.log(`🎯 Turn passed to teammate ${nextTeammate.name}`);
+    } else {
+      // No valid teammates, find next valid player from any team
+      const nextValidPlayer = getNextValidPlayer(updatedState);
+      if (nextValidPlayer) {
+        const nextPlayerIndex = updatedState.players.findIndex(p => p.id === nextValidPlayer.id);
+        updatedState.currentPlayerIndex = nextPlayerIndex;
+        console.log(`🎯 Turn passed to ${nextValidPlayer.name} (cross-team)`);
+      } else {
+        console.log(`❗ No valid players found - this shouldn't happen unless game is over`);
       }
-    ]
-  };
-  
-  // Update card counts
-  for (const player of updatedState.players) {
-    player.cardCount = player.hand.length;
+    }
   }
   
-  return updatedState;
+  // Check if one team has no cards left and auto-award remaining sets
+  const finalState = autoAwardRemainingToTeamWithCards(updatedState);
+  
+  return finalState;
 }
 
 /**
- * Helper function to get all successfully claimed sets (team !== null)
+ * Helper function to get all claimed sets (all sets are always claimed in simplified system)
  */
 export function getClaimedSets(gameState: GameState) {
-  return gameState.claimedSets.filter(set => set.team !== null);
+  return gameState.claimedSets; // All sets are always claimed (no cancelled sets)
 }
 
 /**
- * Helper function to get all cancelled sets (team === null)
+ * Helper function to get cancelled sets - always empty in simplified system
+ * Kept for backwards compatibility with existing code
  */
 export function getCancelledSets(gameState: GameState) {
-  return gameState.claimedSets.filter(set => set.team === null);
+  return []; // No cancelled sets in simplified claiming system
 }
 
 /**
@@ -651,6 +634,36 @@ export function processClaimWithGameEnd(gameState: GameState, claim: ClaimMove) 
     ...claimResult,
     gameEnded: false,
     gameResults: null
+  };
+}
+
+/**
+ * Processes an ask-card move and automatically ends the game if all half-suits are claimed
+ * This is a convenience function that combines applyAskCardMove with game ending logic
+ */
+export function processAskMoveWithGameEnd(gameState: GameState, move: AskCardMove) {
+  const updatedState = applyAskCardMove(gameState, move);
+  
+  // Check if game is over after the move (could be due to auto-award)
+  if (isGameOver(updatedState)) {
+    const finalState = endGame(updatedState);
+    const gameResults = getGameResults(finalState);
+    
+    return {
+      success: true,
+      updatedState: finalState,
+      gameEnded: true,
+      gameResults,
+      lastMove: updatedState.lastMove
+    };
+  }
+
+  return {
+    success: true,
+    updatedState,
+    gameEnded: false,
+    gameResults: null,
+    lastMove: updatedState.lastMove
   };
 }
 

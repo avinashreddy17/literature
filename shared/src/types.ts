@@ -22,7 +22,7 @@ export interface GameState {
   currentPlayerIndex: number;
   phase: 'waiting' | 'playing' | 'finished';
   claimedSets: {
-    team: number | null; // null indicates cancelled set (wrong locations)
+    team: number; // Always 0 or 1 in simplified system (no cancelled sets)
     suit: Suit;
     isHigh: boolean; // true for 9-A, false for 2-7
     cards: Card[];
@@ -48,8 +48,5 @@ export interface ClaimMove {
   playerId: string;
   suit: Suit;
   isHigh: boolean;
-  cardLocations: {
-    playerId: string;
-    cards: Card[];
-  }[];
+  // Removed cardLocations - automatic card discovery now
 } 
