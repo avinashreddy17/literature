@@ -1,5 +1,5 @@
-import { createDeck, shuffleDeck, initializeGame, validateMove, applyMove, checkClaim, isGameOver, getGameResults, endGame, processClaimWithGameEnd } from './game-engine';
-import { Card, GameState, AskCardMove, ClaimMove, Suit, Rank } from './types';
+import { createDeck, shuffleDeck, initializeGame, validateMove, applyMove, checkClaim, isGameOver, getGameResults, endGame, processClaimWithGameEnd, processAskMoveWithGameEnd } from './game-engine';
+import { Card, GameState, AskCardMove, ClaimMove, Suit, Rank, Player } from './types';
 
 // Simple test function - we'll use proper testing framework later
 export function testCreateDeck(): void {
@@ -341,13 +341,7 @@ export function testValidateMove(): void {
     type: 'claim',
     playerId: 'alice',
     suit: 'hearts',
-    isHigh: false,
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [{ suit: 'hearts', rank: '2' }]
-      }
-    ]
+    isHigh: false
   };
   
   if (!validateMove(gameState, validClaimMove)) {
@@ -355,19 +349,30 @@ export function testValidateMove(): void {
   }
   console.log('✓ Accepts valid claim moves');
   
-  // Test 11: Invalid claim moves should be rejected
+  // Test 11: Already claimed half-suits should be rejected
+  const alreadyClaimedGameState = {
+    ...gameState,
+    claimedSets: [
+      {
+        team: 0,
+        suit: 'hearts' as Suit,
+        isHigh: false,
+        cards: []
+      }
+    ]
+  };
+  
   const invalidClaimMove: ClaimMove = {
     type: 'claim',
     playerId: 'alice',
     suit: 'hearts',
-    isHigh: false,
-    cardLocations: [] // Empty locations
+    isHigh: false
   };
   
-  if (validateMove(gameState, invalidClaimMove)) {
-    throw new Error('Should reject claim moves with empty locations');
+  if (validateMove(alreadyClaimedGameState, invalidClaimMove)) {
+    throw new Error('Should reject claim moves for already claimed half-suits');
   }
-  console.log('✓ Rejects claim moves with empty locations');
+  console.log('✓ Rejects already claimed half-suits');
   
   console.log('All validateMove tests passed! ✅');
 }
@@ -497,13 +502,7 @@ export function testApplyMove(): void {
     type: 'claim',
     playerId: 'alice',
     suit: 'hearts',
-    isHigh: false,
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [{ suit: 'hearts', rank: '2' }]
-      }
-    ]
+    isHigh: false
   };
   
   // This should not throw error, but will fail validation inside checkClaim
@@ -589,39 +588,21 @@ function createTestGameState(): GameState {
 }
 
 export function testCheckClaim(): void {
-  console.log('Testing checkClaim()...');
+  console.log('Testing checkClaim() with simplified all-or-nothing logic...');
   
-  // Test 1: Perfect claim - team has all cards with correct locations
+  // Test 1: Successful claim - claiming team has ALL 6 cards
   const gameState = createClaimTestGameState();
-  const validClaim: ClaimMove = {
+  const successfulClaim: ClaimMove = {
     type: 'claim',
     playerId: 'alice',
     suit: 'hearts',
-    isHigh: false, // Low hearts: 2,3,4,5,6,7
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [
-          { suit: 'hearts', rank: '2' },
-          { suit: 'hearts', rank: '3' }
-        ]
-      },
-      {
-        playerId: 'charlie',
-        cards: [
-          { suit: 'hearts', rank: '4' },
-          { suit: 'hearts', rank: '5' },
-          { suit: 'hearts', rank: '6' },
-          { suit: 'hearts', rank: '7' }
-        ]
-      }
-    ]
+    isHigh: false // Low hearts: 2,3,4,5,6,7
   };
   
-  const result1 = checkClaim(gameState, validClaim);
+  const result1 = checkClaim(gameState, successfulClaim);
   
   if (!result1.success || result1.winningTeam !== 0) {
-    throw new Error('Perfect claim should succeed for team 0');
+    throw new Error('Successful claim should win for claiming team (team 0)');
   }
   
   if (result1.updatedState.claimedSets.length !== 1) {
@@ -636,146 +617,66 @@ export function testCheckClaim(): void {
     throw new Error('Cards should be removed after successful claim');
   }
   
-  console.log('✓ Perfect claim works correctly');
-  
-  // Test 2: Wrong locations - team has cards but locations incorrect
-  const wrongLocationClaim: ClaimMove = {
-    type: 'claim',
-    playerId: 'alice',
-    suit: 'clubs',
-    isHigh: true, // High clubs: 9,10,J,Q,K,A
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [
-          { suit: 'clubs', rank: '9' },
-          { suit: 'clubs', rank: '10' },
-          { suit: 'clubs', rank: 'J' }
-        ]
-      },
-      {
-        playerId: 'charlie',
-        cards: [
-          { suit: 'clubs', rank: 'Q' },
-          { suit: 'clubs', rank: 'K' },
-          { suit: 'clubs', rank: 'A' }
-        ]
-      }
-    ]
-  };
-  
-  const result2 = checkClaim(gameState, wrongLocationClaim);
-  
-  if (result2.success || result2.winningTeam !== null) {
-    throw new Error('Wrong locations should cancel the half-suit');
+  if (!result1.message.includes('Team 0 successfully claimed')) {
+    throw new Error('Success message should be clear');
   }
   
-  if (!result2.message.includes('high clubs cancelled')) {
-    throw new Error('Should indicate locations are incorrect and which set was cancelled');
-  }
+  console.log('✓ Successful claim works correctly (team has all cards)');
   
-  // Check that cancelled set is recorded in game state
-  const cancelledSets = result2.updatedState.claimedSets.filter(set => set.team === null);
-  if (cancelledSets.length !== 1) {
-    throw new Error('Should have one cancelled set recorded');
-  }
-  
-  const cancelledSet = cancelledSets[0];
-  if (cancelledSet.suit !== 'clubs' || cancelledSet.isHigh !== true) {
-    throw new Error('Cancelled set details should be correct');
-  }
-  
-  console.log('✓ Wrong locations cancel half-suit correctly');
-  console.log('✓ Cancelled set tracked in game state');
-  
-  // Test 3: Opponent has cards - opposing team wins
-  const opponentCardsClaim: ClaimMove = {
+  // Test 2: Failed claim - claiming team missing cards, opposing team wins
+  const failedClaim: ClaimMove = {
     type: 'claim',
     playerId: 'alice',
     suit: 'spades',
-    isHigh: false, // Low spades: 2,3,4,5,6,7
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [
-          { suit: 'spades', rank: '2' },
-          { suit: 'spades', rank: '3' },
-          { suit: 'spades', rank: '4' },
-          { suit: 'spades', rank: '5' },
-          { suit: 'spades', rank: '6' },
-          { suit: 'spades', rank: '7' }
-        ]
-      }
-    ]
+    isHigh: false // Low spades: 2,3,4,5,6,7 (team 0 doesn't have all)
   };
   
-  const result3 = checkClaim(gameState, opponentCardsClaim);
+  const result2 = checkClaim(gameState, failedClaim);
   
-  if (result3.success || result3.winningTeam !== 1) {
-    throw new Error('Opponent having cards should award to opposing team');
+  if (result2.success || result2.winningTeam !== 1) {
+    throw new Error('Failed claim should award to opposing team (team 1)');
   }
   
-  console.log('✓ Opponent cards award to opposing team correctly');
+  if (!result2.message.includes('Team 1 gets the half-suit')) {
+    throw new Error('Should indicate opposing team gets the points');
+  }
   
-  // Test 4: Wrong number of cards
-  const wrongCountClaim: ClaimMove = {
+  // Check that cards were still removed (half-suit completed)
+  const spadesCards = ['2', '3', '4', '5', '6', '7'].map(rank => ({ suit: 'spades', rank }));
+  const updatedPlayers = result2.updatedState.players;
+  
+  // Verify no player has any of the spades low cards anymore
+  for (const player of updatedPlayers) {
+    for (const card of player.hand) {
+      if (card.suit === 'spades' && spadesCards.some(sc => sc.rank === card.rank)) {
+        throw new Error('Spades low cards should be removed from all players');
+      }
+    }
+  }
+  
+  console.log('✓ Failed claim awards to opposing team correctly');
+  
+  // Test 3: High half-suit claim (different ranks)
+  const highClaim: ClaimMove = {
     type: 'claim',
     playerId: 'alice',
-    suit: 'diamonds',
-    isHigh: true,
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [
-          { suit: 'diamonds', rank: '9' },
-          { suit: 'diamonds', rank: '10' } // Only 2 cards, need 6
-        ]
-      }
-    ]
+    suit: 'clubs',
+    isHigh: true // High clubs: 9,10,J,Q,K,A (team 0 has all these)
   };
   
-  const result4 = checkClaim(gameState, wrongCountClaim);
+  const result3 = checkClaim(gameState, highClaim);
   
-  if (result4.success) {
-    throw new Error('Wrong card count should fail');
+  if (!result3.success || result3.winningTeam !== 0) {
+    throw new Error('High claim should succeed for team 0');
   }
   
-  if (!result4.message.includes('exactly 6 cards')) {
-    throw new Error('Should indicate wrong card count');
+  if (!result3.message.includes('high clubs')) {
+    throw new Error('Should mention high half-suit in message');
   }
   
-  console.log('✓ Wrong card count rejected correctly');
+  console.log('✓ High half-suit claiming works correctly');
   
-  // Test 5: Wrong cards for half-suit
-  const wrongCardsClaim: ClaimMove = {
-    type: 'claim',
-    playerId: 'alice',
-    suit: 'hearts',
-    isHigh: false,
-    cardLocations: [
-      {
-        playerId: 'alice',
-        cards: [
-          { suit: 'hearts', rank: '2' },
-          { suit: 'hearts', rank: '3' },
-          { suit: 'hearts', rank: '9' }, // Wrong - this is high hearts
-          { suit: 'hearts', rank: '4' },
-          { suit: 'hearts', rank: '5' },
-          { suit: 'hearts', rank: '6' }
-        ]
-      }
-    ]
-  };
-  
-  const result5 = checkClaim(gameState, wrongCardsClaim);
-  
-  if (result5.success) {
-    throw new Error('Wrong cards for half-suit should fail');
-  }
-  
-  console.log('✓ Wrong cards for half-suit rejected correctly');
-  
-  // Test 6: Already claimed half-suit (update validateMove test)
+  // Test 4: Already claimed half-suit should be blocked by validation
   const alreadyClaimedState = {
     ...gameState,
     claimedSets: [
@@ -788,17 +689,24 @@ export function testCheckClaim(): void {
     ]
   };
   
-  if (validateMove(alreadyClaimedState, validClaim)) {
-    throw new Error('Should reject claiming already claimed half-suit');
+  const alreadyClaimedClaim: ClaimMove = {
+    type: 'claim',
+    playerId: 'alice',
+    suit: 'hearts',
+    isHigh: false
+  };
+  
+  // This should be blocked by validateClaimMove
+  if (validateMove(alreadyClaimedState, alreadyClaimedClaim)) {
+    throw new Error('Should not validate claim for already claimed half-suit');
   }
   
-  console.log('✓ Already claimed half-suit rejected correctly');
-  
-  console.log('All checkClaim tests passed! 🏆');
+    console.log('✓ Already claimed half-suits blocked by validation');
+  console.log('\n🎉 All simplified claim tests passed!');
 }
 
 function createClaimTestGameState(): GameState {
-  // Create a controlled test game state for claim testing
+  // Create a controlled test game state for simplified claim testing
   return {
     id: 'test_claim_game',
     phase: 'playing',
@@ -810,9 +718,9 @@ function createClaimTestGameState(): GameState {
         team: 0,
         cardCount: 3,
         hand: [
-          { suit: 'hearts', rank: '2' }, // Low hearts
+          { suit: 'hearts', rank: '2' }, // Low hearts - team 0 has all 6
           { suit: 'hearts', rank: '3' }, // Low hearts
-          { suit: 'clubs', rank: '9' }   // High clubs (wrong location for test)
+          { suit: 'clubs', rank: '9' }   // High clubs - team 0 has all 6
         ]
       },
       {
@@ -821,9 +729,9 @@ function createClaimTestGameState(): GameState {
         team: 1,
         cardCount: 3,
         hand: [
-          { suit: 'spades', rank: '2' }, // Low spades (opponent has this)
-          { suit: 'clubs', rank: '10' }, // High clubs
-          { suit: 'clubs', rank: 'J' }   // High clubs
+          { suit: 'spades', rank: '2' }, // Low spades - team 1 has some
+          { suit: 'spades', rank: '3' }, // Low spades
+          { suit: 'diamonds', rank: '9' } // High diamonds
         ]
       },
       {
@@ -832,21 +740,23 @@ function createClaimTestGameState(): GameState {
         team: 0, // Same team as Alice
         cardCount: 5,
         hand: [
-          { suit: 'hearts', rank: '4' }, // Low hearts
+          { suit: 'hearts', rank: '4' }, // Low hearts - completes team 0's set
           { suit: 'hearts', rank: '5' }, // Low hearts
           { suit: 'hearts', rank: '6' }, // Low hearts
           { suit: 'hearts', rank: '7' }, // Low hearts
-          { suit: 'clubs', rank: 'Q' }   // High clubs (correct location)
+          { suit: 'clubs', rank: '10' }  // High clubs - completes team 0's set
         ]
       },
       {
         id: 'diana',
         name: 'Diana',
-        team: 1,
-        cardCount: 2,
+        team: 0, // Same team as Alice and Charlie
+        cardCount: 4,
         hand: [
-          { suit: 'clubs', rank: 'K' }, // High clubs (correct location)  
-          { suit: 'clubs', rank: 'A' }  // High clubs (correct location)
+          { suit: 'clubs', rank: 'J' },  // High clubs
+          { suit: 'clubs', rank: 'Q' },  // High clubs
+          { suit: 'clubs', rank: 'K' },  // High clubs
+          { suit: 'clubs', rank: 'A' }   // High clubs - completes team 0's set
         ]
       }
     ],
@@ -951,29 +861,28 @@ function testGameEnding() {
   }
   console.log('✓ Tied game scenario works correctly (4-4)');
   
-  // Test game with cancelled sets (3-2 with 3 cancelled)
-  const gameWithCancelled = {
+  // Test game with Team 1 win (3-5 score) - no cancelled sets in simplified system
+  const team1WinGame = {
     ...gameState,
     claimedSets: [
       // Team 0 gets 3 sets
       { team: 0, suit: 'hearts' as Suit, isHigh: true, cards: [] },
       { team: 0, suit: 'hearts' as Suit, isHigh: false, cards: [] },
       { team: 0, suit: 'diamonds' as Suit, isHigh: true, cards: [] },
-      // Team 1 gets 2 sets
+      // Team 1 gets 5 sets
       { team: 1, suit: 'diamonds' as Suit, isHigh: false, cards: [] },
       { team: 1, suit: 'clubs' as Suit, isHigh: true, cards: [] },
-      // 3 cancelled sets
-      { team: null, suit: 'clubs' as Suit, isHigh: false, cards: [] },
-      { team: null, suit: 'spades' as Suit, isHigh: true, cards: [] },
-      { team: null, suit: 'spades' as Suit, isHigh: false, cards: [] }
+      { team: 1, suit: 'clubs' as Suit, isHigh: false, cards: [] },
+      { team: 1, suit: 'spades' as Suit, isHigh: true, cards: [] },
+      { team: 1, suit: 'spades' as Suit, isHigh: false, cards: [] }
     ]
   };
   
-  const results3 = getGameResults(gameWithCancelled);
-  if (!results3.isGameOver || results3.winner !== 0 || results3.team0Score !== 3 || results3.team1Score !== 2 || results3.cancelledSets !== 3) {
-    throw new Error('Game with cancelled sets failed');
+  const results3 = getGameResults(team1WinGame);
+  if (!results3.isGameOver || results3.winner !== 1 || results3.team0Score !== 3 || results3.team1Score !== 5 || results3.cancelledSets !== 0) {
+    throw new Error('Team 1 win scenario failed');
   }
-  console.log('✓ Game with cancelled sets works correctly (3-2 with 3 cancelled)');
+  console.log('✓ Team 1 win scenario works correctly (3-5, no cancelled sets)');
   
   // Test 3: endGame function
   console.log('\n--- Test 3: endGame function ---');
@@ -1049,3 +958,142 @@ function testGameEnding() {
   
   console.log('\n🎉 All game ending tests passed!');
 }
+
+/**
+ * Test auto-award functionality during ask-card moves
+ * This tests the new feature where teams are eliminated during ask moves
+ */
+export function testAutoAwardDuringAskMoves(): void {
+  console.log('\n=== Testing Auto-Award During Ask-Card Moves ===');
+  
+  // Create a scenario where Team 1 will be eliminated during an ask-card move
+  const testState: GameState = {
+    id: 'test-auto-award',
+    phase: 'playing',
+    currentPlayerIndex: 0, // Alice's turn (Team 0)
+    players: [
+      {
+        id: 'alice',
+        name: 'Alice',
+        team: 0,
+        hand: [{ suit: 'hearts', rank: '2' }, { suit: 'hearts', rank: '3' }], // 2 cards
+        cardCount: 2
+      },
+      {
+        id: 'bob',
+        name: 'Bob',
+        team: 1,
+        hand: [{ suit: 'hearts', rank: '4' }], // Bob's last card - will be taken
+        cardCount: 1
+      },
+      {
+        id: 'charlie',
+        name: 'Charlie',
+        team: 0,
+        hand: [{ suit: 'clubs', rank: '9' }, { suit: 'clubs', rank: '10' }], // 2 cards
+        cardCount: 2
+      },
+      {
+        id: 'diana',
+        name: 'Diana',
+        team: 1,
+        hand: [], // Already has no cards
+        cardCount: 0
+      }
+    ],
+    claimedSets: [
+      // Only 3 sets claimed so far, 5 remaining
+      { team: 0, suit: 'spades', isHigh: true, cards: [] },
+      { team: 1, suit: 'spades', isHigh: false, cards: [] },
+      { team: 0, suit: 'diamonds', isHigh: true, cards: [] }
+    ],
+    lastMove: undefined
+  };
+
+  console.log('📊 Initial state:');
+  console.log('   - Team 0 cards: Alice(2) + Charlie(2) = 4 cards');
+  console.log('   - Team 1 cards: Bob(1) + Diana(0) = 1 card');
+  console.log('   - Sets claimed: 3/8');
+  console.log('   - Unclaimed sets: 5');
+
+  // Alice asks Bob for his last card (the 4 of hearts)
+  const askMove: AskCardMove = {
+    type: 'ask',
+    fromPlayerId: 'alice',
+    toPlayerId: 'bob',
+    card: { suit: 'hearts', rank: '4' }
+  };
+
+  console.log('🎯 Alice asks Bob for 4 of Hearts (Bob\'s last card)...');
+
+  // Process the move with auto-ending logic
+  const moveResult = processAskMoveWithGameEnd(testState, askMove);
+
+  console.log('✅ Move result:');
+  console.log('   - Success:', moveResult.success);
+  console.log('   - Game ended:', moveResult.gameEnded);
+  console.log('   - Sets after move:', moveResult.updatedState.claimedSets.length);
+
+  // Verify the move was successful
+  if (!moveResult.success) {
+    throw new Error('Ask move should be successful');
+  }
+
+  // Verify the card was transferred
+  const aliceAfter = moveResult.updatedState.players.find((p: Player) => p.id === 'alice');
+  const bobAfter = moveResult.updatedState.players.find((p: Player) => p.id === 'bob');
+
+  if (!aliceAfter || aliceAfter.cardCount !== 3) {
+    throw new Error('Alice should have 3 cards after getting Bob\'s card');
+  }
+
+  if (!bobAfter || bobAfter.cardCount !== 0) {
+    throw new Error('Bob should have 0 cards after losing his last card');
+  }
+
+  console.log('✓ Card transfer successful: Bob(0) + Diana(0) = Team 1 eliminated');
+
+  // Verify game ended due to auto-award
+  if (!moveResult.gameEnded) {
+    throw new Error('Game should have ended due to team elimination');
+  }
+
+  // Verify all 8 sets are now claimed
+  if (moveResult.updatedState.claimedSets.length !== 8) {
+    throw new Error(`Expected 8 claimed sets, got ${moveResult.updatedState.claimedSets.length}`);
+  }
+
+  // Verify Team 0 got the auto-awarded sets
+  const team0Score = moveResult.gameResults!.team0Score;
+  const team1Score = moveResult.gameResults!.team1Score;
+
+  console.log(`📊 Final scores: Team 0: ${team0Score}, Team 1: ${team1Score}`);
+
+  if (team0Score !== 6) { // Original 2 + 4 auto-awarded
+    throw new Error(`Team 0 should have 6 sets (2 original + 4 auto-awarded), got ${team0Score}`);
+  }
+
+  if (team1Score !== 2) { // Original 1 + 1 from original claims
+    throw new Error(`Team 1 should have 2 sets, got ${team1Score}`);
+  }
+
+  // Verify Team 0 wins
+  if (moveResult.gameResults!.winner !== 0) {
+    throw new Error('Team 0 should win');
+  }
+
+  // Verify phase is finished
+  if (moveResult.updatedState.phase !== 'finished') {
+    throw new Error('Game phase should be finished');
+  }
+
+  console.log('✓ Auto-award triggered correctly during ask-card move');
+  console.log('✓ All remaining sets awarded to Team 0');
+  console.log('✓ Game ended automatically');
+  console.log('✓ Final scores calculated correctly');
+
+  console.log('\n🎉 All auto-award during ask-moves tests passed!');
+}
+
+// Run the new test
+testAutoAwardDuringAskMoves();
