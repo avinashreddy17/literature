@@ -1,16 +1,17 @@
-// Game Board - Main Literature gameplay screen
+// Game Board - Main Literature gameplay screen with table layout
 import { useState } from 'react'
-import { GameState, Card, AskCardMove, ClaimMove } from 'shared'
+import { GameState, Card, AskCardMove, ClaimMove, Suit, Rank } from 'shared'
+import GameTable from './GameTable'
 
 /**
- * EXPLANATION: Enhanced Game Board Component
+ * EXPLANATION: Clean Modern Literature Game Board
  * 
- * This is the complete Literature gameplay interface with:
- * - Enhanced card display grouped by half-suits
- * - Ask card modal with Literature rule validation
- * - Claim half-suit modal with strategic information
- * - Move history for context
- * - Real-time game state updates
+ * Redesigned for a cleaner, more professional interface:
+ * - Full-screen oval table with players positioned around it
+ * - Simple 1-2 card display for opponents 
+ * - Clear HIGH/LOW card organization for your hand
+ * - Large, professional modals for asking and claiming
+ * - Clean visual hierarchy with better colors and typography
  */
 
 interface GameBoardProps {
@@ -21,33 +22,25 @@ interface GameBoardProps {
   error: string
 }
 
-// Helper function to get card color
-const getCardColor = (suit: string) => {
-  return suit === 'hearts' || suit === 'diamonds' ? '#dc2626' : '#374151'
-}
-
-// Helper function to get suit symbol
-const getSuitSymbol = (suit: string) => {
-  switch(suit) {
-    case 'hearts': return '♥️'
-    case 'diamonds': return '♦️'
-    case 'clubs': return '♣️'
-    case 'spades': return '♠️'
-    default: return '?'
-  }
-}
-
 // Helper function to check if card is high (9-A) or low (2-7)
 const isHighCard = (rank: string) => {
   return ['9', '10', 'J', 'Q', 'K', 'A'].includes(rank)
 }
 
-// Helper function to get all cards in a half-suit
-const getHalfSuitCards = (suit: string, isHigh: boolean) => {
-  const lowRanks = ['2', '3', '4', '5', '6', '7']
-  const highRanks = ['9', '10', 'J', 'Q', 'K', 'A']
-  const ranks = isHigh ? highRanks : lowRanks
-  return ranks.map(rank => ({ suit, rank }))
+// Helper function to get suit symbol
+const getSuitSymbol = (suit: string) => {
+  switch(suit) {
+    case 'hearts': return '♥'
+    case 'diamonds': return '♦'
+    case 'clubs': return '♣'
+    case 'spades': return '♠'
+    default: return '?'
+  }
+}
+
+// Helper function to get card color
+const getCardColor = (suit: string) => {
+  return suit === 'hearts' || suit === 'diamonds' ? '#dc2626' : '#000'
 }
 
 function GameBoard({ 
@@ -59,29 +52,16 @@ function GameBoard({
 }: GameBoardProps) {
   const [showAskModal, setShowAskModal] = useState(false)
   const [showClaimModal, setShowClaimModal] = useState(false)
-  const [selectedSuit, setSelectedSuit] = useState<string>('')
-  const [selectedRank, setSelectedRank] = useState<string>('')
   const [selectedPlayer, setSelectedPlayer] = useState<string>('')
+  const [selectedSuit, setSelectedSuit] = useState<string>('')
+  const [selectedIsHigh, setSelectedIsHigh] = useState<boolean | null>(null)
+  const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [selectedClaimSuit, setSelectedClaimSuit] = useState<string>('')
   const [selectedClaimIsHigh, setSelectedClaimIsHigh] = useState<boolean>(true)
 
   const currentPlayer = gameState.players.find(p => p.id === yourPlayerId)
   const isYourTurn = gameState.players[gameState.currentPlayerIndex]?.id === yourPlayerId
   const yourTeam = currentPlayer?.team
-
-  // Group your cards by half-suits for better display
-  const groupCardsByHalfSuit = (cards: Card[]) => {
-    const groups: { [key: string]: Card[] } = {}
-    cards.forEach(card => {
-      const isHigh = isHighCard(card.rank)
-      const key = `${card.suit}-${isHigh ? 'high' : 'low'}`
-      if (!groups[key]) groups[key] = []
-      groups[key].push(card)
-    })
-    return groups
-  }
-
-  const cardGroups = currentPlayer ? groupCardsByHalfSuit(currentPlayer.hand) : {}
 
   // Get players you can ask (not teammates, have cards)
   const getValidTargets = () => {
@@ -92,79 +72,96 @@ function GameBoard({
     )
   }
 
-  // Get half-suits you can validly ask for
-  const getValidHalfSuits = () => {
+  // Get suits you have cards in
+  const getAvailableSuits = () => {
     if (!currentPlayer) return []
-    const validSuits: { suit: string; isHigh: boolean }[] = []
+    const suits = new Set(currentPlayer.hand.map(c => c.suit))
+    return Array.from(suits)
+  }
+
+  // Get available high/low options for selected suit
+  const getAvailableHighLow = (suit: string) => {
+    if (!currentPlayer || !suit) return []
     
-    console.log('🔍 ===== CALCULATING VALID HALF-SUITS =====');
-    console.log('👤 Current player hand:', currentPlayer.hand);
+    const suitCards = currentPlayer.hand.filter(c => c.suit === suit)
+    const hasHigh = suitCards.some(c => isHighCard(c.rank))
+    const hasLow = suitCards.some(c => !isHighCard(c.rank))
     
-    currentPlayer.hand.forEach(card => {
-      const isHigh = isHighCard(card.rank)
-      const key = `${card.suit}-${isHigh ? 'high' : 'low'}`
-      console.log(`   Card: ${card.rank} of ${card.suit} -> isHigh: ${isHigh} -> key: ${key}`);
+    const options = []
+    if (hasHigh) options.push({ label: 'HIGH (9, 10, J, Q, K, A)', value: true })
+    if (hasLow) options.push({ label: 'LOW (2, 3, 4, 5, 6, 7)', value: false })
+    
+    return options
+  }
+
+  // Get cards you can ask for in selected suit and high/low
+  const getAvailableCards = (suit: string, isHigh: boolean) => {
+    if (!currentPlayer || !suit || isHigh === null) return []
+    
+    const allRanks: Rank[] = isHigh ? ['9', '10', 'J', 'Q', 'K', 'A'] : ['2', '3', '4', '5', '6', '7']
+    const yourCardRanks = new Set(
+      currentPlayer.hand
+        .filter(c => c.suit === suit && isHighCard(c.rank) === isHigh)
+        .map(c => c.rank)
+    )
+    
+         // You can ask for cards in the same half-suit that you don't already have
+     return allRanks
+       .filter(rank => !yourCardRanks.has(rank))
+       .map(rank => ({ suit: suit as Suit, rank: rank as Rank }))
+  }
+
+  // Get half-suits you can claim
+  const getValidClaims = () => {
+    if (!currentPlayer) return []
+    
+    const validClaims: { suit: string; isHigh: boolean }[] = []
+    const yourSuits = new Set(currentPlayer.hand.map(c => c.suit))
+    
+    yourSuits.forEach(suit => {
+      // Check if you have any high cards in this suit
+      const hasHighCards = currentPlayer.hand.some(c => c.suit === suit && isHighCard(c.rank))
+      // Check if you have any low cards in this suit
+      const hasLowCards = currentPlayer.hand.some(c => c.suit === suit && !isHighCard(c.rank))
       
-      if (!validSuits.some(s => `${s.suit}-${s.isHigh ? 'high' : 'low'}` === key)) {
-        validSuits.push({ suit: card.suit, isHigh })
-        console.log(`   ✅ Added half-suit: ${card.suit} ${isHigh ? 'HIGH' : 'LOW'}`);
-      } else {
-        console.log(`   ⏩ Half-suit already exists: ${card.suit} ${isHigh ? 'HIGH' : 'LOW'}`);
+      // Check if half-suits are already claimed
+      const highClaimed = gameState.claimedSets.some(s => s.suit === suit && s.isHigh)
+      const lowClaimed = gameState.claimedSets.some(s => s.suit === suit && !s.isHigh)
+      
+      if (hasHighCards && !highClaimed) {
+        validClaims.push({ suit, isHigh: true })
+      }
+      if (hasLowCards && !lowClaimed) {
+        validClaims.push({ suit, isHigh: false })
       }
     })
     
-    console.log('📊 Final valid half-suits:', validSuits);
-    console.log('===== VALID HALF-SUITS COMPLETE =====\n');
-    
-    return validSuits
+    return validClaims
   }
 
-  // Check if a half-suit is already claimed
-  const isHalfSuitClaimed = (suit: string, isHigh: boolean) => {
-    return gameState.claimedSets.some(set => 
-      set.suit === suit && set.isHigh === isHigh
-    )
+  const handlePlayerClick = (playerId: string) => {
+    setSelectedPlayer(playerId)
+    setShowAskModal(true)
   }
 
-  // Handle ask card submission
   const handleAskCard = () => {
-    if (!selectedPlayer || !selectedSuit || !selectedRank) return
-
-    console.log('\n🎯 ===== CLIENT: CREATING ASK CARD MOVE =====');
-    console.log('📤 Selected player:', selectedPlayer);
-    console.log('📤 Selected suit (raw):', selectedSuit);
-    console.log('📤 Selected rank:', selectedRank);
-    console.log('👤 Your player ID:', yourPlayerId);
-
-    const [suit, level] = selectedSuit.split('-')
-    console.log('📤 Parsed suit:', suit);
-    console.log('📤 Parsed level:', level);
+    if (!selectedPlayer || !selectedCard) return
 
     const move: AskCardMove = {
       type: 'ask',
       fromPlayerId: yourPlayerId,
       toPlayerId: selectedPlayer,
-      card: { suit: suit as any, rank: selectedRank as any }
+      card: selectedCard
     }
 
-    console.log('📤 Final move being sent:', JSON.stringify(move, null, 2));
-    console.log('🎮 Current game state summary:');
-    console.log('   - Your turn?', isYourTurn);
-    console.log('   - Current player index:', gameState.currentPlayerIndex);
-    console.log('   - Current player ID:', gameState.players[gameState.currentPlayerIndex]?.id);
-    console.log('   - Your player in game:', gameState.players.find(p => p.id === yourPlayerId));
-
     onMakeMove(move)
-    
-    console.log('===== ASK CARD MOVE SENT =====\n');
-    
     setShowAskModal(false)
     setSelectedPlayer('')
+    setSelectedCard(null)
     setSelectedSuit('')
-    setSelectedRank('')
+    setSelectedIsHigh(null)
   }
 
-  // Handle claim half-suit submission
   const handleClaimSet = () => {
     if (!selectedClaimSuit) return
 
@@ -180,594 +177,379 @@ function GameBoard({
     setSelectedClaimSuit('')
   }
 
+  // Reset modal state when closing
+  const handleCloseAskModal = () => {
+    setShowAskModal(false)
+    setSelectedPlayer('')
+    setSelectedCard(null)
+    setSelectedSuit('')
+    setSelectedIsHigh(null)
+  }
+
   const validTargets = getValidTargets()
-  const validHalfSuits = getValidHalfSuits()
+  const availableSuits = getAvailableSuits()
+  const availableHighLow = getAvailableHighLow(selectedSuit)
+  const availableCards = selectedSuit && selectedIsHigh !== null ? getAvailableCards(selectedSuit, selectedIsHigh) : []
+  const validClaims = getValidClaims()
+
+  // Large Card Component for modals
+  const LargeCard = ({ card, selected, onClick }: { card: Card, selected: boolean, onClick: () => void }) => (
+    <div
+      onClick={onClick}
+      style={{
+        width: '80px',
+        height: '112px',
+        background: selected ? '#fef3c7' : '#fff',
+        border: selected ? '3px solid #f59e0b' : '2px solid #d1d5db',
+        borderRadius: '8px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: '16px',
+        color: getCardColor(card.suit),
+        fontWeight: 'bold',
+        padding: '8px',
+        cursor: 'pointer',
+        boxShadow: selected ? '0 4px 12px rgba(245, 158, 11, 0.3)' : '0 2px 4px rgba(0,0,0,0.1)',
+        transition: 'all 0.2s'
+      }}
+    >
+      <div>{card.rank}</div>
+      <div style={{ fontSize: '24px' }}>{getSuitSymbol(card.suit)}</div>
+      <div>{card.rank}</div>
+    </div>
+  )
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-      padding: '1rem'
-    }}>
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        background: 'rgba(255, 255, 255, 0.95)',
-        borderRadius: '20px',
-        padding: '2rem'
-      }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <h1 style={{ color: '#374151', marginBottom: '0.5rem' }}>
-            🎮 Literature Game
-          </h1>
-          <p style={{ color: '#6b7280' }}>
-            {isYourTurn ? "🎯 It's your turn!" : `⏳ Waiting for ${gameState.players[gameState.currentPlayerIndex]?.name}'s turn`}
-          </p>
-          {gameState.lastMove && (
-            <p style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '0.5rem' }}>
-              Last move: {gameState.lastMove.successful 
-                ? `${gameState.lastMove.fromPlayer} successfully got ${gameState.lastMove.card.rank} of ${gameState.lastMove.card.suit} from ${gameState.lastMove.toPlayer}`
-                : `${gameState.lastMove.fromPlayer} asked ${gameState.lastMove.toPlayer} for ${gameState.lastMove.card.rank} of ${gameState.lastMove.card.suit} (not found)`
-              }
-            </p>
-          )}
-        </div>
-
-        {error && (
-          <div style={{
-            padding: '1rem',
-            background: '#fee2e2',
-            border: '1px solid #fecaca',
-            borderRadius: '8px',
-            color: '#dc2626',
-            marginBottom: '2rem',
-            textAlign: 'center'
-          }}>
-            ❌ {error}
-          </div>
-        )}
-
-        {/* Game State Info */}
-        <div style={{ 
-          display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1rem',
-          marginBottom: '2rem'
+    <div>
+      {/* Error display */}
+      {error && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 1000,
+          padding: '12px 20px',
+          background: 'rgba(239, 68, 68, 0.95)',
+          border: '1px solid #fecaca',
+          borderRadius: '12px',
+          color: 'white',
+          fontSize: '14px',
+          fontWeight: 'bold',
+          backdropFilter: 'blur(10px)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2)'
         }}>
-          {/* Your Hand - Grouped by Half-Suits */}
+          ❌ {error}
+        </div>
+      )}
+
+      {/* Main Game Table */}
+      <GameTable
+        gameState={gameState}
+        yourPlayerId={yourPlayerId}
+        onPlayerClick={handlePlayerClick}
+        onAskCard={() => setShowAskModal(true)}
+        onClaimSet={() => setShowClaimModal(true)}
+      />
+
+      {/* Ask Card Modal */}
+      {showAskModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
           <div style={{
-            background: '#f8fafc',
-            border: '2px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '1.5rem'
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '700px',
+            width: '95vw',
+            maxHeight: '85vh',
+            overflow: 'auto'
           }}>
-            <h3 style={{ marginBottom: '1rem', color: '#374151' }}>
-              🃏 Your Hand ({currentPlayer?.hand.length || 0} cards)
-            </h3>
-            {Object.keys(cardGroups).length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                {Object.entries(cardGroups).map(([groupKey, cards]) => {
-                  const [suit, level] = groupKey.split('-')
-                  const isHigh = level === 'high'
+            <h2 style={{ 
+              fontSize: '24px', 
+              fontWeight: 'bold', 
+              marginBottom: '20px', 
+              textAlign: 'center',
+              color: '#374151'
+            }}>
+              ⭐ Ask for a Card
+            </h2>
+
+            {/* Player Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>
+                1. Select Player:
+              </h3>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {validTargets.map(player => (
+                  <button
+                    key={player.id}
+                    onClick={() => setSelectedPlayer(player.id)}
+                    style={{
+                      padding: '12px 16px',
+                      border: selectedPlayer === player.id ? '3px solid #3b82f6' : '2px solid #d1d5db',
+                      borderRadius: '12px',
+                      background: selectedPlayer === player.id ? '#dbeafe' : 'white',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '14px'
+                    }}
+                                     >
+                     <div>{player.name}</div>
+                     <div style={{ fontSize: '12px', opacity: 0.7 }}>
+                       {player.cardCount} cards • Team {player.team === 0 ? 'Blue' : 'Red'}
+                     </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Suit Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>
+                2. Select Suit (you have cards in):
+              </h3>
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {availableSuits.map(suit => (
+                  <button
+                    key={suit}
+                    onClick={() => {
+                      setSelectedSuit(suit)
+                      setSelectedIsHigh(null)
+                      setSelectedCard(null)
+                    }}
+                    style={{
+                      padding: '15px 20px',
+                      border: selectedSuit === suit ? '3px solid #059669' : '2px solid #d1d5db',
+                      borderRadius: '12px',
+                      background: selectedSuit === suit ? '#ecfdf5' : 'white',
+                      cursor: 'pointer',
+                      fontWeight: 'bold',
+                      fontSize: '16px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      color: getCardColor(suit)
+                    }}
+                  >
+                    <span style={{ fontSize: '20px' }}>{getSuitSymbol(suit)}</span>
+                    <span>{suit.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* High/Low Selection */}
+            {selectedSuit && (
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>
+                  3. Select High or Low:
+                </h3>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {availableHighLow.map(option => (
+                    <button
+                      key={option.value.toString()}
+                      onClick={() => {
+                        setSelectedIsHigh(option.value)
+                        setSelectedCard(null)
+                      }}
+                      style={{
+                        padding: '15px 20px',
+                        border: selectedIsHigh === option.value ? '3px solid #7c3aed' : '2px solid #d1d5db',
+                        borderRadius: '12px',
+                        background: selectedIsHigh === option.value ? '#f3e8ff' : 'white',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        fontSize: '14px',
+                        textAlign: 'left'
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Card Selection */}
+            {selectedSuit && selectedIsHigh !== null && (
+              <div style={{ marginBottom: '20px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>
+                  4. Select Specific Card:
+                </h3>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', 
+                  gap: '10px',
+                  maxHeight: '200px',
+                  overflow: 'auto'
+                }}>
+                  {availableCards.map((card, index) => (
+                    <LargeCard
+                      key={index}
+                      card={card}
+                      selected={selectedCard?.suit === card.suit && selectedCard?.rank === card.rank}
+                      onClick={() => setSelectedCard(card)}
+                    />
+                  ))}
+                </div>
+                {availableCards.length === 0 && (
+                  <div style={{ textAlign: 'center', color: '#6b7280', padding: '20px' }}>
+                    You already have all cards in this half-suit!
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={handleCloseAskModal}
+                style={{
+                  padding: '12px 24px',
+                  border: '2px solid #d1d5db',
+                  borderRadius: '10px',
+                  background: 'white',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAskCard}
+                disabled={!selectedPlayer || !selectedCard}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '10px',
+                  background: selectedPlayer && selectedCard ? '#059669' : '#d1d5db',
+                  color: 'white',
+                  cursor: selectedPlayer && selectedCard ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold'
+                }}
+              >
+                Ask for Card
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Claim Set Modal */}
+      {showClaimModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0, 0, 0, 0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            background: 'white',
+            borderRadius: '20px',
+            padding: '30px',
+            maxWidth: '500px',
+            width: '90vw'
+          }}>
+            <h2 style={{ 
+              fontSize: '24px', 
+              fontWeight: 'bold', 
+              marginBottom: '20px', 
+              textAlign: 'center',
+              color: '#374151'
+            }}>
+              🏆 Claim a Half-Suit
+            </h2>
+
+            {/* Half-Suit Selection */}
+            <div style={{ marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '16px', fontWeight: 'bold', marginBottom: '10px' }}>
+                Select Half-Suit to Claim:
+              </h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {validClaims.map((claim, index) => {
+                  const isSelected = selectedClaimSuit === claim.suit && selectedClaimIsHigh === claim.isHigh
                   return (
-                    <div key={groupKey} style={{
-                      background: 'white',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '8px',
-                      padding: '1rem'
-                    }}>
-                      <div style={{ 
-                        fontSize: '0.9rem', 
-                        fontWeight: 'bold', 
-                        marginBottom: '0.5rem',
-                        color: getCardColor(suit)
-                      }}>
-                        {getSuitSymbol(suit)} {suit.charAt(0).toUpperCase() + suit.slice(1)} {isHigh ? 'High' : 'Low'} ({cards.length}/6)
+                    <button
+                      key={index}
+                      onClick={() => {
+                        setSelectedClaimSuit(claim.suit)
+                        setSelectedClaimIsHigh(claim.isHigh)
+                      }}
+                      style={{
+                        padding: '15px',
+                        border: isSelected ? '3px solid #7c3aed' : '2px solid #d1d5db',
+                        borderRadius: '10px',
+                        background: isSelected ? '#f3e8ff' : 'white',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                        textAlign: 'left'
+                      }}
+                    >
+                      <div style={{ fontSize: '18px', color: getCardColor(claim.suit) }}>
+                        {getSuitSymbol(claim.suit)} {claim.suit.toUpperCase()} - {claim.isHigh ? 'HIGH' : 'LOW'}
                       </div>
-                      <div style={{ 
-                        display: 'flex', 
-                        flexWrap: 'wrap',
-                        gap: '0.25rem'
-                      }}>
-                        {cards.map(card => (
-                          <div 
-                            key={`${card.suit}-${card.rank}`}
-                            style={{
-                              background: '#f3f4f6',
-                              border: '1px solid #d1d5db',
-                              borderRadius: '4px',
-                              padding: '0.25rem 0.5rem',
-                              fontSize: '0.8rem',
-                              color: getCardColor(card.suit)
-                            }}
-                          >
-                            {card.rank}
-                          </div>
-                        ))}
+                      <div style={{ fontSize: '14px', color: '#6b7280', marginTop: '5px' }}>
+                        {claim.isHigh ? '9, 10, J, Q, K, A' : '2, 3, 4, 5, 6, 7'}
                       </div>
-                    </div>
+                    </button>
                   )
                 })}
               </div>
-            ) : (
-              <p style={{ color: '#6b7280' }}>No cards</p>
-            )}
-          </div>
-
-          {/* Game Score */}
-          <div style={{
-            background: '#f8fafc',
-            border: '2px solid #e2e8f0',
-            borderRadius: '12px',
-            padding: '1.5rem'
-          }}>
-            <h3 style={{ marginBottom: '1rem', color: '#374151' }}>
-              🏆 Score
-            </h3>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  fontSize: '2rem', 
-                  fontWeight: 'bold', 
-                  color: yourTeam === 0 ? '#2563eb' : '#6b7280' 
-                }}>
-                  {gameState.claimedSets.filter(set => set.team === 0).length}
-                </div>
-                <div style={{ color: yourTeam === 0 ? '#2563eb' : '#6b7280' }}>
-                  Team 0 {yourTeam === 0 ? '(You)' : ''}
-                </div>
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ 
-                  fontSize: '2rem', 
-                  fontWeight: 'bold', 
-                  color: yourTeam === 1 ? '#dc2626' : '#6b7280' 
-                }}>
-                  {gameState.claimedSets.filter(set => set.team === 1).length}
-                </div>
-                <div style={{ color: yourTeam === 1 ? '#dc2626' : '#6b7280' }}>
-                  Team 1 {yourTeam === 1 ? '(You)' : ''}
-                </div>
-              </div>
             </div>
-            <div style={{ fontSize: '0.9rem', color: '#6b7280', textAlign: 'center' }}>
-              {gameState.claimedSets.length}/8 sets claimed
-            </div>
-          </div>
-        </div>
 
-        {/* Players */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem', color: '#374151' }}>👥 Players</h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
-            gap: '0.5rem'
-          }}>
-            {gameState.players.map((player, index) => (
-              <div 
-                key={player.id}
-                style={{
-                  padding: '1rem',
-                  background: player.id === yourPlayerId ? '#dbeafe' : 
-                           player.team === yourTeam ? '#ecfdf5' : '#f3f4f6',
-                  border: index === gameState.currentPlayerIndex ? '2px solid #10b981' : '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  textAlign: 'center'
-                }}
-              >
-                <div style={{ fontWeight: 'bold' }}>{player.name}</div>
-                <div style={{ 
-                  fontSize: '0.8rem', 
-                  color: player.team === yourTeam ? '#059669' : '#6b7280' 
-                }}>
-                  Team {player.team} • {player.cardCount} cards
-                </div>
-                {index === gameState.currentPlayerIndex && (
-                  <div style={{ fontSize: '0.7rem', color: '#10b981', marginTop: '0.25rem' }}>
-                    🎯 Current Turn
-                  </div>
-                )}
-                {player.id === yourPlayerId && (
-                  <div style={{ fontSize: '0.7rem', color: '#2563eb', marginTop: '0.25rem' }}>
-                    You
-                  </div>
-                )}
-                {player.team === yourTeam && player.id !== yourPlayerId && (
-                  <div style={{ fontSize: '0.7rem', color: '#059669', marginTop: '0.25rem' }}>
-                    Teammate
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Claimed Sets */}
-        <div style={{ marginBottom: '2rem' }}>
-          <h3 style={{ marginBottom: '1rem', color: '#374151' }}>
-            🏆 Claimed Sets ({gameState.claimedSets.length}/8)
-          </h3>
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '0.5rem'
-          }}>
-            {gameState.claimedSets.map((set, index) => (
-              <div 
-                key={`${set.suit}-${set.isHigh}`}
-                style={{
-                  padding: '1rem',
-                  background: set.team === 0 ? '#dbeafe' : '#fecaca',
-                  border: `2px solid ${set.team === 0 ? '#2563eb' : '#dc2626'}`,
-                  borderRadius: '8px',
-                  textAlign: 'center'
-                }}
-              >
-                <div style={{ fontWeight: 'bold' }}>
-                  {getSuitSymbol(set.suit)} {set.suit.charAt(0).toUpperCase() + set.suit.slice(1)} {set.isHigh ? 'High' : 'Low'}
-                </div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                  Team {set.team}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        {isYourTurn && (
-          <div style={{ 
-            marginTop: '2rem', 
-            textAlign: 'center',
-            padding: '1.5rem',
-            background: '#f0fdf4',
-            border: '2px solid #bbf7d0',
-            borderRadius: '12px'
-          }}>
-            <p style={{ marginBottom: '1rem', color: '#16a34a', fontWeight: 'bold' }}>
-              🎯 It's your turn! Choose an action:
-            </p>
-            <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
               <button
-                onClick={() => setShowAskModal(true)}
-                disabled={validTargets.length === 0}
+                onClick={() => setShowClaimModal(false)}
                 style={{
-                  padding: '0.75rem 1.5rem',
-                  background: validTargets.length > 0 ? '#2563eb' : '#9ca3af',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: validTargets.length > 0 ? 'pointer' : 'not-allowed',
-                  fontWeight: '600'
-                }}
-              >
-                ❓ Ask for Card
-              </button>
-              
-              <button
-                onClick={() => setShowClaimModal(true)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#dc2626',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
+                  padding: '12px 24px',
+                  border: '2px solid #d1d5db',
+                  borderRadius: '10px',
+                  background: 'white',
                   cursor: 'pointer',
-                  fontWeight: '600'
+                  fontWeight: 'bold'
                 }}
               >
-                🏆 Claim Set
+                Cancel
+              </button>
+              <button
+                onClick={handleClaimSet}
+                disabled={!selectedClaimSuit}
+                style={{
+                  padding: '12px 24px',
+                  border: 'none',
+                  borderRadius: '10px',
+                  background: selectedClaimSuit ? '#7c3aed' : '#d1d5db',
+                  color: 'white',
+                  cursor: selectedClaimSuit ? 'pointer' : 'not-allowed',
+                  fontWeight: 'bold'
+                }}
+              >
+                Claim Half-Suit
               </button>
             </div>
-            {validTargets.length === 0 && (
-              <p style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '0.5rem' }}>
-                No valid opponents to ask (teammates or players with no cards)
-              </p>
-            )}
           </div>
-        )}
-
-        {/* Ask Card Modal */}
-        {showAskModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}>
-            <div style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '2rem',
-              maxWidth: '500px',
-              width: '90%',
-              maxHeight: '80vh',
-              overflowY: 'auto'
-            }}>
-              <h3 style={{ marginBottom: '1rem' }}>❓ Ask for Card</h3>
-              
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  Ask which player?
-                </label>
-                <select
-                  value={selectedPlayer}
-                  onChange={(e) => setSelectedPlayer(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px'
-                  }}
-                >
-                  <option value="">Select player...</option>
-                  {validTargets.map(player => (
-                    <option key={player.id} value={player.id}>
-                      {player.name} (Team {player.team}, {player.cardCount} cards)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  Which half-suit? (You can only ask for cards in half-suits you have)
-                </label>
-                <select
-                  value={selectedSuit}
-                  onChange={(e) => {
-                    setSelectedSuit(e.target.value)
-                    setSelectedRank('')
-                  }}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px'
-                  }}
-                >
-                  <option value="">Select half-suit...</option>
-                  {validHalfSuits.map(({ suit, isHigh }) => (
-                    <option key={`${suit}-${isHigh}`} value={`${suit}-${isHigh ? 'high' : 'low'}`}>
-                      {getSuitSymbol(suit)} {suit.charAt(0).toUpperCase() + suit.slice(1)} {isHigh ? 'High' : 'Low'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedSuit && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                    Which specific card?
-                  </label>
-                  <select
-                    value={selectedRank}
-                    onChange={(e) => setSelectedRank(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: '0.5rem',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px'
-                    }}
-                  >
-                    <option value="">Select card...</option>
-                    {(() => {
-                      const [suit, level] = selectedSuit.split('-')
-                      const isHigh = level === 'high'
-                      const allCards = getHalfSuitCards(suit, isHigh)
-                      const yourCards = currentPlayer?.hand || []
-                      
-                      console.log('🔍 DROPDOWN DEBUG:');
-                      console.log('   - Selected suit/level:', suit, level, isHigh);
-                      console.log('   - All cards in half-suit:', allCards);
-                      console.log('   - Your current cards:', yourCards);
-                      
-                      const availableCards = allCards
-                        .filter(card => !yourCards.some(c => c.suit === card.suit && c.rank === card.rank))
-                      
-                      console.log('   - Available cards to ask for:', availableCards);
-                      
-                      return availableCards.map(card => (
-                          <option key={`${card.suit}-${card.rank}`} value={card.rank}>
-                            {card.rank} of {card.suit}
-                          </option>
-                        ))
-                    })()}
-                  </select>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => {
-                    setShowAskModal(false)
-                    setSelectedPlayer('')
-                    setSelectedSuit('')
-                    setSelectedRank('')
-                  }}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAskCard}
-                  disabled={!selectedPlayer || !selectedSuit || !selectedRank}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: selectedPlayer && selectedSuit && selectedRank ? '#2563eb' : '#9ca3af',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: selectedPlayer && selectedSuit && selectedRank ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Ask for Card
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Claim Set Modal */}
-        {showClaimModal && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-          }}>
-            <div style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '2rem',
-              maxWidth: '500px',
-              width: '90%',
-              maxHeight: '80vh',
-              overflowY: 'auto'
-            }}>
-              <h3 style={{ marginBottom: '1rem' }}>🏆 Claim Half-Suit</h3>
-              <p style={{ marginBottom: '1rem', color: '#6b7280', fontSize: '0.9rem' }}>
-                ⚠️ <strong>Warning:</strong> If you don't have all 6 cards, the opposing team gets the point!
-              </p>
-              
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  Which suit?
-                </label>
-                <select
-                  value={selectedClaimSuit}
-                  onChange={(e) => setSelectedClaimSuit(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.5rem',
-                    border: '1px solid #d1d5db',
-                    borderRadius: '6px'
-                  }}
-                >
-                  <option value="">Select suit...</option>
-                  {['hearts', 'diamonds', 'clubs', 'spades'].map(suit => (
-                    <option key={suit} value={suit}>
-                      {getSuitSymbol(suit)} {suit.charAt(0).toUpperCase() + suit.slice(1)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold' }}>
-                  High or Low?
-                </label>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
-                    onClick={() => setSelectedClaimIsHigh(false)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: !selectedClaimIsHigh ? '#2563eb' : '#f3f4f6',
-                      color: !selectedClaimIsHigh ? 'white' : '#374151',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Low (2,3,4,5,6,7)
-                  </button>
-                  <button
-                    onClick={() => setSelectedClaimIsHigh(true)}
-                    style={{
-                      padding: '0.5rem 1rem',
-                      background: selectedClaimIsHigh ? '#2563eb' : '#f3f4f6',
-                      color: selectedClaimIsHigh ? 'white' : '#374151',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '6px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    High (9,10,J,Q,K,A)
-                  </button>
-                </div>
-              </div>
-
-              {selectedClaimSuit && (
-                <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ 
-                    background: '#f8fafc', 
-                    border: '1px solid #e2e8f0', 
-                    borderRadius: '6px', 
-                    padding: '1rem' 
-                  }}>
-                    <div style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                      {getSuitSymbol(selectedClaimSuit)} {selectedClaimSuit.charAt(0).toUpperCase() + selectedClaimSuit.slice(1)} {selectedClaimIsHigh ? 'High' : 'Low'} Half-Suit:
-                    </div>
-                    <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-                      {getHalfSuitCards(selectedClaimSuit, selectedClaimIsHigh)
-                        .map(card => `${card.rank} of ${card.suit}`)
-                        .join(', ')}
-                    </div>
-                    {isHalfSuitClaimed(selectedClaimSuit, selectedClaimIsHigh) && (
-                      <div style={{ color: '#dc2626', fontSize: '0.8rem', marginTop: '0.5rem' }}>
-                        ⚠️ This half-suit has already been claimed!
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => {
-                    setShowClaimModal(false)
-                    setSelectedClaimSuit('')
-                  }}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: '#6b7280',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleClaimSet}
-                  disabled={!selectedClaimSuit || isHalfSuitClaimed(selectedClaimSuit, selectedClaimIsHigh)}
-                  style={{
-                    padding: '0.5rem 1rem',
-                    background: selectedClaimSuit && !isHalfSuitClaimed(selectedClaimSuit, selectedClaimIsHigh) ? '#dc2626' : '#9ca3af',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '6px',
-                    cursor: selectedClaimSuit && !isHalfSuitClaimed(selectedClaimSuit, selectedClaimIsHigh) ? 'pointer' : 'not-allowed'
-                  }}
-                >
-                  Claim Set
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

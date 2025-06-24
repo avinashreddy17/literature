@@ -123,6 +123,13 @@ export class GameManager {
       return null;
     }
 
+    // Check for duplicate player names in this room (case-insensitive)
+    const existingPlayer = room.players.find(p => p.playerName.toLowerCase() === playerName.toLowerCase());
+    if (existingPlayer) {
+      console.log(`❌ Name "${playerName}" already taken in room ${roomId}`);
+      return null;
+    }
+
     // Add the new player
     const newPlayer: ConnectedPlayer = {
       socketId: playerSocketId,

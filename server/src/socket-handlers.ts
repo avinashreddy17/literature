@@ -116,7 +116,16 @@ export function setupSocketHandlers(
       const room = gameManager.joinGame(roomId.toUpperCase(), socket.id, playerName.trim());
       
       if (!room) {
-        socket.emit('error', { message: 'Could not join game', code: 'JOIN_FAILED' });
+        // Check if it's a duplicate name issue
+        const existingRoom = gameManager.getRoom(roomId.toUpperCase());
+        if (existingRoom && existingRoom.players.find(p => p.playerName.toLowerCase() === playerName.toLowerCase())) {
+          socket.emit('error', { 
+            message: `Name "${playerName}" is already taken in this room. Please choose a different name.`, 
+            code: 'DUPLICATE_NAME' 
+          });
+        } else {
+          socket.emit('error', { message: 'Could not join game', code: 'JOIN_FAILED' });
+        }
         return;
       }
 
