@@ -25,7 +25,7 @@ const httpServer = createServer(app);
 
 // --- Production/Deployment Configuration ---
 // The client URL will be set by an environment variable in production
-const clientUrl = process.env.CLIENT_URL || 'https://literature-nizi.onrender.com' || 'http://localhost:5173';
+const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Create Socket.io server attached to HTTP server
 const io = new Server(httpServer, {
@@ -54,16 +54,12 @@ app.use(express.json());
 
 // --- Serve Frontend in Production ---
 if (process.env.NODE_ENV === 'production') {
-  // Get the correct path to the client's build directory
-  const clientBuildPath = path.resolve(__dirname, '../../client/dist');
-  
-  // Serve static files from the React app
+  const clientBuildPath = path.join(__dirname, '../../client/dist');
   app.use(express.static(clientBuildPath));
 
-  // The "catchall" handler: for any request that doesn't match one above,
-  // send back React's index.html file.
+  // For any other request, serve the index.html file
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(clientBuildPath, 'index.html'));
+    res.sendFile(path.join(clientBuildPath, 'index.html'));
   });
 }
 
