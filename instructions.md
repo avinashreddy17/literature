@@ -100,3 +100,10 @@ literature/
 1. Review what was accomplished
 2. Update progress documentation
 3. Plan the next logical step 
+
+## 🕹️ Playing the Game (UI Overview)
+- Your hand is now displayed at the bottom of the screen, grouped by suit (♥ ♦ ♣ ♠) in a horizontal row for easy viewing.
+- The turn indicator is at the top center, always showing whose turn it is.
+- Your player name and team are shown above your hand.
+- Opponent hands are shown around the oval table with only 1-2 cards visible for clarity.
+- Score and claimed sets are always visible at the top right. 

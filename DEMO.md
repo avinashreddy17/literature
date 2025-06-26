@@ -1,4 +1,12 @@
-# 🎮 Literature Game Engine Demo
+# 🎮 Literature Game UI Demo (2024 Update)
+
+## New UI Features
+- All players are visible around a professional oval table
+- Your hand is grouped by suit (♥ ♦ ♣ ♠) in a horizontal row at the bottom
+- Turn indicator is at the top center
+- Your name and team are shown above your hand
+- Score and claimed sets are always visible at the top right
+- Opponent hands show only 1-2 cards for clarity
 
 ## What We've Built So Far
 

@@ -32,6 +32,7 @@ literature/
 
 ### `client/`
 - **UI**: All presentation, navigation, and user input
+  - **GameTable**: Displays all players around an oval table, with your hand grouped by suit (♥ ♦ ♣ ♠) in a horizontal row at the bottom. The turn indicator is at the top center. Your name and team are shown above your hand. Score and claimed sets are at the top right.
 - **State Management**: Handles `gameState`, `playerId`, etc.
 - **Socket Service**: Communicates with backend
 - **Pages**: `Lobby`, `GameRoom`, etc.
