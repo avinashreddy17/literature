@@ -24,8 +24,11 @@ const app = express();
 const httpServer = createServer(app);
 
 // --- Production/Deployment Configuration ---
-// The client URL will be set by an environment variable in production
-const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
+// The client URL will be set by an environment variable in production,
+// with a fallback to your Render domain.
+const clientUrl = process.env.NODE_ENV === 'production' 
+  ? (process.env.CLIENT_URL || 'https://literature-nizi.onrender.com') 
+  : 'http://localhost:5173';
 
 // Create Socket.io server attached to HTTP server
 const io = new Server(httpServer, {
