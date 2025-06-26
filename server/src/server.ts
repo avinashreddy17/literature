@@ -24,8 +24,8 @@ const app = express();
 const httpServer = createServer(app);
 
 // --- Production/Deployment Configuration ---
-const isProduction = process.env.NODE_ENV === 'production';
-const clientUrl = isProduction ? 'https://your-production-url.com' : 'http://localhost:5173'; // Replace with your frontend URL
+// The client URL will be set by an environment variable in production
+const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
 
 // Create Socket.io server attached to HTTP server
 const io = new Server(httpServer, {
@@ -53,7 +53,7 @@ app.use(cors({
 app.use(express.json());
 
 // --- Serve Frontend in Production ---
-if (isProduction) {
+if (process.env.NODE_ENV === 'production') {
   // Get the correct path to the client's build directory
   const clientBuildPath = path.resolve(__dirname, '../../client/dist');
   
