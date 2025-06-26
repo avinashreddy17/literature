@@ -1,7 +1,9 @@
 // Game Board - Main Literature gameplay screen with table layout
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { GameState, Card, AskCardMove, ClaimMove, Suit, Rank } from 'shared'
 import GameTable from './GameTable'
+import CardAnimationManager from './CardAnimationManager'
+import './CardAnimations.css'
 
 /**
  * EXPLANATION: Clean Modern Literature Game Board
@@ -58,10 +60,61 @@ function GameBoard({
   const [selectedCard, setSelectedCard] = useState<Card | null>(null)
   const [selectedClaimSuit, setSelectedClaimSuit] = useState<string>('')
   const [selectedClaimIsHigh, setSelectedClaimIsHigh] = useState<boolean>(true)
+  
+  // Animation state
+  const [triggerTransferAnimation, setTriggerTransferAnimation] = useState<{
+    card: Card
+    fromPlayerId: string
+    toPlayerId: string
+  } | null>(null)
+  const [triggerClaimAnimation, setTriggerClaimAnimation] = useState<{
+    cards: Card[]
+    winningTeam: number
+  } | null>(null)
+  const [lastMoveState, setLastMoveState] = useState<any>(null)
 
   const currentPlayer = gameState.players.find(p => p.id === yourPlayerId)
   const isYourTurn = gameState.players[gameState.currentPlayerIndex]?.id === yourPlayerId
   const yourTeam = currentPlayer?.team
+
+  // Detect when to trigger animations based on game state changes
+  useEffect(() => {
+    // Detect card transfers from last move
+    if (gameState.lastMove && gameState.lastMove !== lastMoveState) {
+      if (gameState.lastMove.successful) {
+        setTriggerTransferAnimation({
+          card: gameState.lastMove.card,
+          fromPlayerId: gameState.lastMove.toPlayer,
+          toPlayerId: gameState.lastMove.fromPlayer
+        })
+        // Clear transfer animation after delay
+        setTimeout(() => setTriggerTransferAnimation(null), 2000)
+      }
+      setLastMoveState(gameState.lastMove)
+    }
+  }, [gameState, lastMoveState])
+
+  // Detect claim animations
+  useEffect(() => {
+    if (gameState.claimedSets.length > 0) {
+      const lastClaim = gameState.claimedSets[gameState.claimedSets.length - 1]
+      if (lastClaim) {
+        // Get cards for this half-suit (use the actual cards from the claim)
+        const claimCards = lastClaim.cards
+        
+        setTriggerClaimAnimation({
+          cards: claimCards,
+          winningTeam: lastClaim.team
+        })
+        // Clear claim animation after delay
+        setTimeout(() => setTriggerClaimAnimation(null), 3000)
+      }
+    }
+  }, [gameState.claimedSets])
+
+  const handleAnimationComplete = (animationType: string) => {
+    // Handle animation completion if needed
+  }
 
   // Get players you can ask (not teammates, have cards)
   const getValidTargets = () => {
@@ -252,6 +305,15 @@ function GameBoard({
         onPlayerClick={handlePlayerClick}
         onAskCard={() => setShowAskModal(true)}
         onClaimSet={() => setShowClaimModal(true)}
+      />
+
+      {/* Card Animation Manager - Handles all card animations */}
+      <CardAnimationManager
+        gameState={gameState}
+        yourPlayerId={yourPlayerId}
+        onAnimationComplete={handleAnimationComplete}
+        triggerTransferAnimation={triggerTransferAnimation}
+        triggerClaimAnimation={triggerClaimAnimation}
       />
 
       {/* Ask Card Modal */}

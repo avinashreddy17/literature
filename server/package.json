@@ -5,7 +5,8 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.5",

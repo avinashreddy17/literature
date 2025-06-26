@@ -3,6 +3,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import path from 'path'; // Import path module
 
 // Import our game manager (we'll create this next)
 import { GameManager } from './game-manager';
@@ -22,10 +23,14 @@ const app = express();
 // Create HTTP server (Socket.io needs this, not just Express)
 const httpServer = createServer(app);
 
+// --- Production/Deployment Configuration ---
+const isProduction = process.env.NODE_ENV === 'production';
+const clientUrl = isProduction ? 'https://your-production-url.com' : 'http://localhost:5173'; // Replace with your frontend URL
+
 // Create Socket.io server attached to HTTP server
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173", // Vite React dev server (we'll use this later)
+    origin: clientUrl,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -40,12 +45,27 @@ const io = new Server(httpServer, {
 
 // Enable CORS for all routes (allows React app to call our API)
 app.use(cors({
-  origin: "http://localhost:5173", // React dev server
+  origin: clientUrl,
   credentials: true
 }));
 
 // Parse JSON request bodies (when we add REST APIs later)
 app.use(express.json());
+
+// --- Serve Frontend in Production ---
+if (isProduction) {
+  // Get the correct path to the client's build directory
+  const clientBuildPath = path.resolve(__dirname, '../../client/dist');
+  
+  // Serve static files from the React app
+  app.use(express.static(clientBuildPath));
+
+  // The "catchall" handler: for any request that doesn't match one above,
+  // send back React's index.html file.
+  app.get('*', (req, res) => {
+    res.sendFile(path.resolve(clientBuildPath, 'index.html'));
+  });
+}
 
 /**
  * EXPLANATION: Route Handlers

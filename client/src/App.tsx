@@ -76,8 +76,12 @@ function App() {
   
   useEffect(() => {
     // Connect to our Literature game server
-    const newSocket = io('http://localhost:3001')
-    setSocket(newSocket)
+    const serverUrl = process.env.NODE_ENV === 'production' 
+      ? window.location.origin 
+      : 'http://localhost:3001';
+
+    const newSocket = io(serverUrl);
+    setSocket(newSocket);
 
     // Connection event handlers
     newSocket.on('connect', () => {

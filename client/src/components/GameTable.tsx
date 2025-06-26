@@ -1,5 +1,7 @@
-import React from 'react'
-import { GameState, Card } from 'shared'
+import React, { useState, useEffect } from 'react'
+import { GameState, Card, Suit } from 'shared'
+import './CardAnimations.css'
+import './MobileOptimizations.css'
 
 interface GameTableProps {
   gameState: GameState
@@ -9,6 +11,23 @@ interface GameTableProps {
   onClaimSet?: () => void
 }
 
+// Mobile detection hook
+const useIsMobile = () => {
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+  
+  return isMobile
+}
+
 const GameTable: React.FC<GameTableProps> = ({ 
   gameState, 
   yourPlayerId, 
@@ -16,6 +35,7 @@ const GameTable: React.FC<GameTableProps> = ({
   onAskCard,
   onClaimSet
 }) => {
+  const isMobile = useIsMobile()
   const currentPlayerIndex = gameState.currentPlayerIndex
   const currentPlayer = gameState.players[currentPlayerIndex]
   const isYourTurn = currentPlayer?.id === yourPlayerId
@@ -72,32 +92,51 @@ const GameTable: React.FC<GameTableProps> = ({
     return suits
   }
 
-  // Calculate player positions around the table
+  // Calculate player positions - different for mobile vs desktop
   const calculatePlayerPositions = (playerCount: number, yourIndex: number) => {
     const positions = []
-    const angleStep = (2 * Math.PI) / playerCount
     
-    for (let i = 0; i < playerCount; i++) {
-      // Skip yourself - you're not shown as a player around the table
-      if (i === yourIndex) continue
+    if (isMobile) {
+      // Mobile: Linear arrangement with you at bottom
+      for (let i = 0; i < playerCount; i++) {
+        if (i === yourIndex) continue // Skip yourself
+        
+        const adjustedIndex = i < yourIndex ? i : i - 1
+        const totalOthers = playerCount - 1
+        
+        // Arrange others in a vertical stack on the left side
+        const y = 15 + (adjustedIndex * (70 / totalOthers))
+        
+        positions.push({
+          x: 5, // Left side for mobile
+          y: Math.max(10, Math.min(85, y)),
+          angle: 0,
+          playerIndex: i
+        })
+      }
+    } else {
+      // Desktop: Oval arrangement
+      const angleStep = (2 * Math.PI) / playerCount
       
-      // Rotate so you're always at the bottom, others distributed around
-      const adjustedIndex = i < yourIndex ? i : i - 1 // Adjust for skipping yourself
-      const totalOthers = playerCount - 1
-      const angle = (adjustedIndex * (2 * Math.PI)) / totalOthers - Math.PI / 2 // Start from top
-      
-      // For oval table
-      const radiusX = 35 // Percentage of container width
-      const radiusY = 25 // Percentage of container height
-      const x = 50 + (radiusX * Math.cos(angle))
-      const y = 50 + (radiusY * Math.sin(angle))
-      
-      positions.push({
-        x: Math.max(5, Math.min(95, x)),
-        y: Math.max(10, Math.min(90, y)),
-        angle: angle,
-        playerIndex: i
-      })
+      for (let i = 0; i < playerCount; i++) {
+        if (i === yourIndex) continue
+        
+        const adjustedIndex = i < yourIndex ? i : i - 1
+        const totalOthers = playerCount - 1
+        const angle = (adjustedIndex * (2 * Math.PI)) / totalOthers - Math.PI / 2
+        
+        const radiusX = 35
+        const radiusY = 25
+        const x = 50 + (radiusX * Math.cos(angle))
+        const y = 50 + (radiusY * Math.sin(angle))
+        
+        positions.push({
+          x: Math.max(5, Math.min(95, x)),
+          y: Math.max(10, Math.min(90, y)),
+          angle: angle,
+          playerIndex: i
+        })
+      }
     }
     
     return positions
@@ -108,34 +147,64 @@ const GameTable: React.FC<GameTableProps> = ({
   const yourCards = yourPlayer?.hand || []
   const cardsBySuit = groupYourCardsBySuit(yourCards)
 
-  // Simple card component
-  const PlayingCard = ({ card, size = 'small', isBack = false }: { 
+  // Enhanced card component with mobile-optimized sizing
+  const PlayingCard = ({ card, size = 'small', isBack = false, glowEffect = false, pulsing = false }: { 
     card?: Card, 
-    size?: 'small' | 'medium', 
-    isBack?: boolean 
+    size?: 'small' | 'medium' | 'large', 
+    isBack?: boolean,
+    glowEffect?: boolean,
+    pulsing?: boolean
   }) => {
+    const getAnimationCSS = () => {
+      let animations = []
+      if (pulsing) animations.push('cardPulse 2s infinite')
+      if (glowEffect) animations.push('cardGlow 1.5s ease-in-out infinite alternate')
+      return animations.join(', ')
+    }
+
+    // Mobile-responsive card sizes
+    const getCardSize = () => {
+      if (isMobile) {
+        return {
+          small: { width: '25px', height: '35px', fontSize: '8px' },
+          medium: { width: '50px', height: '70px', fontSize: '12px' },
+          large: { width: '65px', height: '91px', fontSize: '14px' }
+        }[size]
+      } else {
+        return {
+          small: { width: '30px', height: '42px', fontSize: '8px' },
+          medium: { width: '60px', height: '84px', fontSize: '14px' },
+          large: { width: '80px', height: '112px', fontSize: '16px' }
+        }[size]
+      }
+    }
+
+    const cardSize = getCardSize()
+
     const cardStyle: React.CSSProperties = {
-      width: size === 'small' ? '30px' : '60px',
-      height: size === 'small' ? '42px' : '84px',
+      ...cardSize,
       background: isBack ? 'linear-gradient(145deg, #1e40af, #3b82f6)' : '#fff',
-      border: '1px solid #ccc',
-      borderRadius: '4px',
+      border: glowEffect ? '2px solid #06d6a0' : '1px solid #ccc',
+      borderRadius: isMobile ? '3px' : '4px',
       display: 'flex',
       flexDirection: 'column' as const,
       alignItems: 'center',
       justifyContent: 'space-between',
-      fontSize: size === 'small' ? '8px' : '14px',
       color: card ? getCardColor(card.suit) : '#fff',
       fontWeight: 'bold',
-      padding: '2px',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      position: 'relative' // Needed for pseudo-elements
+      padding: isMobile ? '1px' : '2px',
+      boxShadow: glowEffect 
+        ? '0 6px 20px rgba(6, 214, 160, 0.4), 0 3px 10px rgba(0, 0, 0, 0.2)'
+        : '0 2px 4px rgba(0,0,0,0.2)',
+      position: 'relative',
+      animation: getAnimationCSS(),
+      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
     }
 
     if (isBack) {
       return (
         <div style={cardStyle}>
-          <div style={{ fontSize: size === 'small' ? '12px' : '20px', color: '#fff' }}>
+          <div style={{ fontSize: cardSize.fontSize, color: '#fff' }}>
             🂠
           </div>
         </div>
@@ -144,13 +213,336 @@ const GameTable: React.FC<GameTableProps> = ({
 
     return (
       <div style={cardStyle}>
-        <div>{card?.rank}</div>
-        <div>{card ? getSuitSymbol(card.suit) : ''}</div>
-        <div>{card?.rank}</div>
+        <div style={{ fontSize: cardSize.fontSize }}>{card?.rank}</div>
+        <div style={{ fontSize: cardSize.fontSize }}>{card ? getSuitSymbol(card.suit) : ''}</div>
+        <div style={{ fontSize: cardSize.fontSize }}>{card?.rank}</div>
       </div>
     )
   }
 
+  // Mobile-specific layout
+  if (isMobile) {
+    return (
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        background: 'linear-gradient(145deg, #0a5d2c, #0f7534, #0a5d2c)',
+        position: 'relative',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column'
+      }}>
+        {/* Mobile Header - Game Info */}
+        <div style={{
+          background: 'rgba(0,0,0,0.8)',
+          color: 'white',
+          padding: '10px',
+          fontSize: '14px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          zIndex: 30
+        }}>
+          <div>
+            <strong>Team {yourTeam === 0 ? 'Blue' : 'Red'}</strong>
+          </div>
+          <div style={{
+            background: isYourTurn ? '#22c55e' : 'rgba(255,255,255,0.2)',
+            padding: '5px 12px',
+            borderRadius: '15px',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          }}>
+            {isYourTurn ? '🎯 YOUR TURN' : `${currentPlayer?.name}'s Turn`}
+          </div>
+          <div>
+            Score: {gameState.claimedSets.filter(set => set.team === yourTeam).length}/8
+          </div>
+        </div>
+
+        {/* Mobile Game Area */}
+        <div style={{
+          flex: 1,
+          display: 'flex',
+          position: 'relative'
+        }}>
+          {/* Left Side - Other Players */}
+          <div style={{
+            width: '35%',
+            padding: '10px 5px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            background: 'rgba(0,0,0,0.1)'
+          }}>
+            {playerPositions.map((pos, index) => {
+              const player = gameState.players[pos.playerIndex]
+              const isCurrentPlayer = player.id === currentPlayer?.id
+              const canAsk = player.team !== yourTeam && player.cardCount > 0 && isYourTurn
+
+              return (
+                <div key={player.id} style={{
+                  background: player.team === 0 ? 'rgba(59, 130, 246, 0.8)' : 'rgba(220, 38, 38, 0.8)',
+                  color: 'white',
+                  padding: '8px',
+                  borderRadius: '8px',
+                  fontSize: '12px',
+                  border: isCurrentPlayer ? '2px solid #fbbf24' : '2px solid transparent',
+                  cursor: canAsk ? 'pointer' : 'default',
+                  opacity: canAsk ? 1 : 0.7
+                }} onClick={() => canAsk && onPlayerClick && onPlayerClick(player.id)}>
+                  <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+                    {player.name}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>{player.cardCount} cards</span>
+                    <div style={{ display: 'flex', gap: '2px' }}>
+                      <PlayingCard isBack={true} size="small" pulsing={isCurrentPlayer} />
+                      {player.cardCount > 1 && (
+                        <PlayingCard isBack={true} size="small" />
+                      )}
+                    </div>
+                  </div>
+                  {canAsk && (
+                    <div style={{
+                      marginTop: '4px',
+                      background: '#dc2626',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      textAlign: 'center',
+                      fontSize: '10px',
+                      fontWeight: 'bold'
+                    }}>
+                      TAP TO ASK
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Right Side - Game Center */}
+          <div style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '10px',
+            textAlign: 'center'
+          }}>
+            {/* Game Stats */}
+            <div style={{
+              background: 'rgba(0,0,0,0.8)',
+              color: 'white',
+              padding: '15px',
+              borderRadius: '10px',
+              marginBottom: '20px',
+              minWidth: '150px'
+            }}>
+              <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>🎮 Literature</h3>
+              <div style={{ fontSize: '14px', marginBottom: '5px' }}>
+                Team Blue: {gameState.claimedSets.filter(set => set.team === 0).length}
+              </div>
+              <div style={{ fontSize: '14px', marginBottom: '10px' }}>
+                Team Red: {gameState.claimedSets.filter(set => set.team === 1).length}
+              </div>
+            </div>
+
+            {/* Mobile Last Move Display - Prominent */}
+            {gameState.lastMove && (
+              <div style={{
+                background: gameState.lastMove.successful 
+                  ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.25), rgba(34, 197, 94, 0.15))' 
+                  : 'linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.15))',
+                color: 'white',
+                padding: '12px',
+                borderRadius: '12px',
+                marginBottom: '15px',
+                border: gameState.lastMove.successful 
+                  ? '2px solid rgba(34, 197, 94, 0.4)'
+                  : '2px solid rgba(239, 68, 68, 0.4)',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.3)',
+                backdropFilter: 'blur(10px)',
+                textAlign: 'center'
+              }}>
+                <div style={{ 
+                  fontWeight: 'bold', 
+                  marginBottom: '6px',
+                  fontSize: '14px',
+                  color: gameState.lastMove.successful ? '#22c55e' : '#ef4444'
+                }}>
+                  {gameState.lastMove.successful ? '✅ SUCCESS' : '❌ FAILED'}
+                </div>
+                <div style={{ fontSize: '12px', marginBottom: '4px' }}>
+                  <strong>{gameState.lastMove.fromPlayer}</strong> asked{' '}
+                  <strong>{gameState.lastMove.toPlayer}</strong> for:
+                </div>
+                <div style={{ 
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: getCardColor(gameState.lastMove.card.suit),
+                  textShadow: '0 1px 2px rgba(0,0,0,0.5)'
+                }}>
+                  {gameState.lastMove.card.rank}{getSuitSymbol(gameState.lastMove.card.suit)}
+                </div>
+                {gameState.lastMove.successful && (
+                  <div style={{ 
+                    fontSize: '10px', 
+                    marginTop: '4px',
+                    opacity: 0.8,
+                    fontStyle: 'italic'
+                  }}>
+                    Card transferred!
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Action Buttons - Mobile optimized */}
+            {isYourTurn && (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                width: '100%',
+                maxWidth: '200px'
+              }}>
+                <button
+                  onClick={onAskCard}
+                  style={{
+                    background: '#059669',
+                    color: 'white',
+                    border: 'none',
+                    padding: '15px 20px',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                    minHeight: '48px' // Touch-friendly
+                  }}
+                >
+                  ⭐ Ask Card
+                </button>
+                <button
+                  onClick={onClaimSet}
+                  style={{
+                    background: '#7c3aed',
+                    color: 'white',
+                    border: 'none',
+                    padding: '15px 20px',
+                    borderRadius: '8px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+                    minHeight: '48px' // Touch-friendly
+                  }}
+                >
+                  🏆 Claim Set
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Bottom - Your Cards */}
+        <div style={{
+          background: 'rgba(0,0,0,0.9)',
+          padding: '10px',
+          maxHeight: '40vh',
+          overflowY: 'auto',
+          borderTop: '3px solid #d4af37'
+        }}>
+          <div style={{
+            color: 'white',
+            fontSize: '14px',
+            fontWeight: 'bold',
+            textAlign: 'center',
+            marginBottom: '8px',
+            background: yourTeam === 0 ? 'rgba(59, 130, 246, 0.3)' : 'rgba(220, 38, 38, 0.3)',
+            padding: '5px 15px',
+            borderRadius: '15px',
+            display: 'inline-block',
+            width: '100%'
+          }}>
+            {yourPlayer?.name} (You) - {yourCards.length} cards
+          </div>
+
+          {/* Mobile cards layout - more compact */}
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px'
+          }}>
+            {Object.entries(cardsBySuit).map(([suit, suitGroups]) => {
+              const suitCardsLow = suitGroups.low;
+              const suitCardsHigh = suitGroups.high;
+              if (suitCardsLow.length === 0 && suitCardsHigh.length === 0) return null;
+
+              return (
+                <div key={suit} style={{
+                  background: 'rgba(255,255,255,0.1)',
+                  padding: '8px',
+                  borderRadius: '8px'
+                }}>
+                  {/* Suit header */}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    marginBottom: '5px',
+                    color: getCardColor(suit as Suit) === '#000' ? '#fff' : getCardColor(suit as Suit),
+                    fontSize: '14px',
+                    fontWeight: 'bold'
+                  }}>
+                    <span style={{ fontSize: '16px', marginRight: '5px' }}>
+                      {getSuitSymbol(suit as Suit)}
+                    </span>
+                    <span>{suit.toUpperCase()}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: '12px', opacity: 0.8 }}>
+                      ({suitCardsLow.length + suitCardsHigh.length})
+                    </span>
+                  </div>
+
+                  {/* Cards in rows */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    {suitCardsLow.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', minWidth: '30px' }}>
+                          LOW
+                        </span>
+                        <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                          {suitCardsLow.map((card, index) => (
+                            <PlayingCard key={`${suit}-low-${index}`} card={card} size="medium" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {suitCardsHigh.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '10px', color: 'rgba(255,255,255,0.7)', minWidth: '30px' }}>
+                          HIGH
+                        </span>
+                        <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap' }}>
+                          {suitCardsHigh.map((card, index) => (
+                            <PlayingCard key={`${suit}-high-${index}`} card={card} size="medium" />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Desktop layout (existing code continues...)
   return (
     <div style={{
       width: '100vw',
@@ -175,7 +567,7 @@ const GameTable: React.FC<GameTableProps> = ({
             borderRadius: '25px',
             fontSize: '16px',
             fontWeight: 'bold',
-            animation: 'pulse 2s infinite',
+            animation: 'turnPulse 2s infinite',
             boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)',
             textAlign: 'center'
           }}>
@@ -183,7 +575,7 @@ const GameTable: React.FC<GameTableProps> = ({
           </div>
         ) : (
           <div style={{
-            background: 'rgba(107, 114, 128, 0.9)',
+            background: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
             padding: '10px 20px',
             borderRadius: '25px',
@@ -242,25 +634,54 @@ const GameTable: React.FC<GameTableProps> = ({
           {/* Last Move Display */}
           {gameState.lastMove && (
             <div style={{
-              background: 'rgba(0,0,0,0.8)',
+              background: gameState.lastMove.successful 
+                ? 'rgba(34, 197, 94, 0.15)' 
+                : 'rgba(239, 68, 68, 0.15)',
               color: 'white',
-              padding: '8px 12px',
-              borderRadius: '12px',
-              fontSize: '12px',
+              padding: '12px 16px',
+              borderRadius: '16px',
+              fontSize: '14px',
               textAlign: 'center',
-              border: '1px solid rgba(255,255,255,0.2)',
+              border: gameState.lastMove.successful 
+                ? '2px solid rgba(34, 197, 94, 0.4)'
+                : '2px solid rgba(239, 68, 68, 0.4)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              gap: '8px'
+              gap: '10px',
+              backdropFilter: 'blur(10px)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
             }}>
-              <div>
-                {gameState.lastMove.successful 
-                  ? `${gameState.lastMove.fromPlayer} got card from ${gameState.lastMove.toPlayer}`
-                  : `${gameState.lastMove.fromPlayer} asked ${gameState.lastMove.toPlayer} (miss)`
-                }
+              <div style={{ 
+                fontWeight: 'bold', 
+                fontSize: '16px',
+                color: gameState.lastMove.successful ? '#22c55e' : '#ef4444'
+              }}>
+                {gameState.lastMove.successful ? '✅ SUCCESS' : '❌ FAILED'}
               </div>
-              <PlayingCard card={gameState.lastMove.card} size="small" />
+              <div style={{ fontSize: '14px' }}>
+                <strong>{gameState.lastMove.fromPlayer}</strong> asked{' '}
+                <strong>{gameState.lastMove.toPlayer}</strong> for:
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <PlayingCard card={gameState.lastMove.card} size="small" />
+                <span style={{ 
+                  fontSize: '16px',
+                  fontWeight: 'bold',
+                  color: getCardColor(gameState.lastMove.card.suit)
+                }}>
+                  {gameState.lastMove.card.rank}{getSuitSymbol(gameState.lastMove.card.suit)}
+                </span>
+              </div>
+              {gameState.lastMove.successful && (
+                <div style={{ 
+                  fontSize: '12px', 
+                  opacity: 0.8,
+                  fontStyle: 'italic'
+                }}>
+                  Card transferred successfully!
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -385,7 +806,7 @@ const GameTable: React.FC<GameTableProps> = ({
                 fontWeight: 'bold',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                 border: isCurrentPlayer ? '2px solid #fbbf24' : '2px solid transparent',
-                animation: isCurrentPlayer ? 'pulse 2s infinite' : 'none'
+                animation: isCurrentPlayer ? 'playerTurnHighlight 2s infinite' : 'none'
               }}>
                 <div>{player.name}</div>
                 <div style={{ fontSize: '12px', opacity: 0.9 }}>
@@ -395,8 +816,20 @@ const GameTable: React.FC<GameTableProps> = ({
 
               {/* Player cards (1-2 cards for others) */}
               <div style={{ display: 'flex', gap: '4px' }}>
-                <PlayingCard isBack={true} size="small" />
-                {player.cardCount > 1 && <PlayingCard isBack={true} size="small" />}
+                <PlayingCard 
+                  isBack={true} 
+                  size="small" 
+                  pulsing={isCurrentPlayer} 
+                  glowEffect={isCurrentPlayer}
+                />
+                {player.cardCount > 1 && (
+                  <PlayingCard 
+                    isBack={true} 
+                    size="small" 
+                    pulsing={isCurrentPlayer}
+                    glowEffect={isCurrentPlayer}
+                  />
+                )}
               </div>
 
               {/* Ask button for opponents */}
