@@ -72,10 +72,17 @@ function GameBoard({
     winningTeam: number
   } | null>(null)
   const [lastMoveState, setLastMoveState] = useState<any>(null)
+  // Track previous number of claimed sets to detect NEW claims
+  const [previousClaimedSetsCount, setPreviousClaimedSetsCount] = useState(0)
 
   const currentPlayer = gameState.players.find(p => p.id === yourPlayerId)
   const isYourTurn = gameState.players[gameState.currentPlayerIndex]?.id === yourPlayerId
   const yourTeam = currentPlayer?.team
+
+  // Initialize the claimed sets count when component first loads
+  useEffect(() => {
+    setPreviousClaimedSetsCount(gameState.claimedSets.length)
+  }, []) // Only run once when component mounts
 
   // Detect when to trigger animations based on game state changes
   useEffect(() => {
@@ -94,11 +101,13 @@ function GameBoard({
     }
   }, [gameState, lastMoveState])
 
-  // Detect claim animations
+  // Detect claim animations - ONLY when NEW claims are made
   useEffect(() => {
-    if (gameState.claimedSets.length > 0) {
+    if (gameState.claimedSets.length > previousClaimedSetsCount) {
+      // A new claim was just made!
       const lastClaim = gameState.claimedSets[gameState.claimedSets.length - 1]
       if (lastClaim) {
+        console.log('🏆 New claim detected! Triggering animation for:', lastClaim)
         // Get cards for this half-suit (use the actual cards from the claim)
         const claimCards = lastClaim.cards
         
@@ -109,8 +118,13 @@ function GameBoard({
         // Clear claim animation after delay
         setTimeout(() => setTriggerClaimAnimation(null), 3000)
       }
+      // Update the count to prevent triggering again
+      setPreviousClaimedSetsCount(gameState.claimedSets.length)
+    } else if (gameState.claimedSets.length < previousClaimedSetsCount) {
+      // Game was reset or restarted, reset our counter
+      setPreviousClaimedSetsCount(gameState.claimedSets.length)
     }
-  }, [gameState.claimedSets])
+  }, [gameState.claimedSets, previousClaimedSetsCount])
 
   const handleAnimationComplete = (animationType: string) => {
     // Handle animation completion if needed
